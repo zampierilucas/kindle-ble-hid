@@ -1,5 +1,7 @@
 # Kindle BLE HID - Quick Start Guide
 
+**SSH Access:** Use `ssh kindle` throughout this guide. The `kindle` hostname is already configured in `~/.ssh/config` and preferred over using the IP address directly.
+
 ## One-time Setup (already completed)
 
 The Bumble BLE HID solution has been installed and configured on your Kindle.

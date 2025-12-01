@@ -15,6 +15,8 @@ ssh kindle '/etc/init.d/ble-hid status'
 ssh kindle 'tail -f /var/log/ble_hid_daemon.log'
 ```
 
+**Note:** The `kindle` SSH host is already configured in `~/.ssh/config` and should be used instead of the IP address directly.
+
 See `QUICK_START.md` for detailed usage and troubleshooting.
 
 ## How It Works
