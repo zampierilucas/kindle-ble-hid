@@ -83,6 +83,7 @@ class UHIDDevice:
         self.report_descriptor = report_descriptor
         self.fd = None
         self.running = False
+        self.event_loop_task = None
 
     async def create(self):
         """Create the UHID device"""
@@ -138,10 +139,61 @@ class UHIDDevice:
             os.write(self.fd, create_req)
             self.running = True
             logging.info(f"Created UHID device: {self.name}")
+
+            # Start event loop to handle kernel responses
+            self.event_loop_task = asyncio.create_task(self._event_loop())
+
             return True
         except OSError as e:
             logging.error(f"Failed to create UHID device: {e}")
             return False
+
+    async def _event_loop(self):
+        """Read and handle kernel events from UHID"""
+        print(color(">>> UHID event loop started", 'green'))
+
+        while self.running:
+            try:
+                # Use asyncio to avoid blocking
+                await asyncio.sleep(0.01)
+
+                # Try to read event from kernel
+                try:
+                    data = os.read(self.fd, 4096)
+                except BlockingIOError:
+                    # No data available (non-blocking read)
+                    continue
+                except OSError as e:
+                    logging.error(f"Error reading UHID event: {e}")
+                    break
+
+                if len(data) < 4:
+                    continue
+
+                # Parse event type
+                event_type = struct.unpack('<I', data[:4])[0]
+
+                if event_type == UHID_START:
+                    print(color(">>> UHID: Received START from kernel", 'green'))
+                elif event_type == UHID_STOP:
+                    print(color(">>> UHID: Received STOP from kernel", 'yellow'))
+                elif event_type == UHID_OPEN:
+                    print(color(">>> UHID: Received OPEN from kernel (device ready!)", 'green'))
+                elif event_type == UHID_CLOSE:
+                    print(color(">>> UHID: Received CLOSE from kernel", 'yellow'))
+                elif event_type == UHID_OUTPUT:
+                    # Output report from kernel (e.g., LED state for keyboard)
+                    if len(data) >= 6:
+                        size = struct.unpack('<H', data[4:6])[0]
+                        output_data = data[6:6+size]
+                        print(color(f">>> UHID: Received OUTPUT from kernel: {output_data.hex()}", 'cyan'))
+                else:
+                    print(color(f">>> UHID: Unknown event type: {event_type}", 'yellow'))
+
+            except Exception as e:
+                logging.error(f"Error in UHID event loop: {e}")
+
+        print(color(">>> UHID event loop stopped", 'yellow'))
 
     def send_input(self, report_data: bytes):
         """Send an input report to the virtual HID device"""
@@ -175,12 +227,18 @@ class UHIDDevice:
         """Destroy the UHID device"""
         if self.fd is not None:
             if self.running:
+                self.running = False
+
+                # Cancel event loop task
+                if self.event_loop_task and not self.event_loop_task.done():
+                    self.event_loop_task.cancel()
+
                 event = struct.pack('<I', UHID_DESTROY)
                 try:
                     os.write(self.fd, event)
                 except OSError:
                     pass
-                self.running = False
+
             os.close(self.fd)
             self.fd = None
             logging.info("Destroyed UHID device")
@@ -227,6 +285,8 @@ class BLEHIDHost:
         self.uhid_device = None
         self.hid_reports = {}  # report_id -> characteristic
         self.report_map = None
+        self.last_button_state = {}  # report_id -> button_state (to detect changes)
+        self.last_press_time = 0  # Global timestamp for debouncing (across all report IDs)
 
     async def start(self):
         """Initialize the Bumble device"""
@@ -444,13 +504,125 @@ class BLEHIDHost:
 
     def _on_hid_report(self, value):
         """Handle incoming HID input reports"""
+        import time
+
         report_data = bytes(value)
         print(color(f">>> HID Report: {report_data.hex()}", 'magenta'))
 
-        if self.uhid_device:
-            self.uhid_device.send_input(report_data)
-        else:
+        if not self.uhid_device:
             logging.error("Received HID report but uhid_device is None!")
+            return
+
+        if len(report_data) < 2:
+            return
+
+        # Extract report ID and button state
+        report_id = report_data[0]
+        button_state = report_data[1]
+
+        # Get previous button state
+        prev_state = self.last_button_state.get(report_id, 0)
+
+        # Detect newly pressed buttons (bits that changed from 0 to 1)
+        newly_pressed = button_state & ~prev_state
+
+        if newly_pressed:
+            # Debounce: ignore ANY button press within 300ms (global across all report IDs)
+            current_time = time.time()
+
+            if current_time - self.last_press_time < 0.3:
+                print(color(f"    Debounced (too soon)", 'blue'))
+                self.last_button_state[report_id] = button_state
+                return
+
+            # Send the press event
+            translated_data = self._translate_report_id(report_data)
+            self.uhid_device.send_input(translated_data)
+            print(color(f"    Button press: 0x{button_state:02x} (new: 0x{newly_pressed:02x})", 'green'))
+
+            # Immediately synthesize a release event (all buttons off)
+            release_data = bytearray(report_data)
+            release_data[1] = 0x00  # Clear all buttons
+            translated_release = self._translate_report_id(bytes(release_data))
+            self.uhid_device.send_input(translated_release)
+            print(color(f"    Auto-release sent", 'yellow'))
+
+            # Update global debounce timestamp
+            self.last_press_time = current_time
+
+        # Update last state
+        self.last_button_state[report_id] = button_state
+
+    def _translate_report_id(self, report_data):
+        """
+        Translate invalid report IDs (0, 7) to valid ones (5, 7).
+        HID doesn't allow report ID 0.
+        """
+        if len(report_data) < 1:
+            return report_data
+
+        report_id = report_data[0]
+
+        # Translate ID 0 -> 5 (0 is reserved in HID spec)
+        if report_id == 0x00:
+            print(color(f"    Translating report ID 0x00 -> 0x05", 'yellow'))
+            return bytes([0x05]) + report_data[1:]
+
+        return report_data
+
+    def _patch_report_descriptor(self, original_descriptor):
+        """
+        Patch report descriptor to add button reports for IDs 5 and 7.
+        ID 5: translated from device's invalid ID 0
+        ID 7: device sends this directly
+        """
+        # Simple 8-button descriptor for Report ID 5 (translated from 0)
+        report_id_5 = bytes([
+            0x85, 0x05,        # Report ID (5)
+            0x05, 0x09,        # Usage Page (Button)
+            0x19, 0x01,        # Usage Minimum (Button 1)
+            0x29, 0x08,        # Usage Maximum (Button 8)
+            0x15, 0x00,        # Logical Minimum (0)
+            0x25, 0x01,        # Logical Maximum (1)
+            0x75, 0x01,        # Report Size (1 bit)
+            0x95, 0x08,        # Report Count (8 buttons)
+            0x81, 0x02,        # Input (Data, Variable, Absolute)
+            0x75, 0x08,        # Report Size (8 bits)
+            0x95, 0x04,        # Report Count (4 bytes padding)
+            0x81, 0x01,        # Input (Constant)
+        ])
+
+        # Simple 8-button descriptor for Report ID 7
+        report_id_7 = bytes([
+            0x85, 0x07,        # Report ID (7)
+            0x05, 0x09,        # Usage Page (Button)
+            0x19, 0x01,        # Usage Minimum (Button 1)
+            0x29, 0x08,        # Usage Maximum (Button 8)
+            0x15, 0x00,        # Logical Minimum (0)
+            0x25, 0x01,        # Logical Maximum (1)
+            0x75, 0x01,        # Report Size (1 bit)
+            0x95, 0x08,        # Report Count (8 buttons)
+            0x81, 0x02,        # Input (Data, Variable, Absolute)
+            0x75, 0x08,        # Report Size (8 bits)
+            0x95, 0x04,        # Report Count (4 bytes padding)
+            0x81, 0x01,        # Input (Constant)
+        ])
+
+        # Wrap in application collection
+        patched = bytes([
+            0x05, 0x01,        # Usage Page (Generic Desktop)
+            0x09, 0x05,        # Usage (Game Pad)
+            0xA1, 0x01,        # Collection (Application)
+        ])
+        patched += report_id_5
+        patched += report_id_7
+        patched += bytes([0xC0])  # End Collection
+
+        # Append original descriptor
+        patched += original_descriptor
+
+        print(color(f"    Patched descriptor: {len(original_descriptor)} -> {len(patched)} bytes", 'cyan'))
+        return patched
 
     async def create_uhid_device(self, name: str = "BLE HID Device"):
         """Create a virtual HID device using UHID"""
@@ -458,11 +630,14 @@ class BLEHIDHost:
             print(color(">>> No report map available!", 'red'))
             return False
 
+        # Patch the report descriptor to add missing button reports (IDs 0 and 7)
+        patched_descriptor = self._patch_report_descriptor(self.report_map)
+
         # Use dummy VID/PID for now
         vid = 0x0001
         pid = 0x0001
 
-        self.uhid_device = UHIDDevice(name, vid, pid, self.report_map)
+        self.uhid_device = UHIDDevice(name, vid, pid, patched_descriptor)
         return await self.uhid_device.create()
 
     async def run(self, target_address: str):
