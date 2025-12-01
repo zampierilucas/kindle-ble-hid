@@ -145,7 +145,11 @@ class UHIDDevice:
 
     def send_input(self, report_data: bytes):
         """Send an input report to the virtual HID device"""
-        if not self.running or self.fd is None:
+        if not self.running:
+            logging.error(f"UHID send_input: device not running (running={self.running})")
+            return
+        if self.fd is None:
+            logging.error(f"UHID send_input: fd is None")
             return
 
         # struct uhid_input2_req {
@@ -158,7 +162,8 @@ class UHIDDevice:
         event += report_data.ljust(4096, b'\x00')
 
         try:
-            os.write(self.fd, event)
+            bytes_written = os.write(self.fd, event)
+            logging.debug(f"UHID sent {bytes_written} bytes for report: {report_data.hex()}")
         except OSError as e:
             logging.error(f"Failed to send input report: {e}")
 
@@ -436,6 +441,8 @@ class BLEHIDHost:
 
         if self.uhid_device:
             self.uhid_device.send_input(report_data)
+        else:
+            logging.error("Received HID report but uhid_device is None!")
 
     async def create_uhid_device(self, name: str = "BLE HID Device"):
         """Create a virtual HID device using UHID"""

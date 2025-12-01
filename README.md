@@ -1,6 +1,6 @@
 # Kindle Bluetooth Development
 
-This project enables standard Bluetooth functionality on the Kindle MT8110 Bellatrix (MediaTek MT8512), replacing Amazon's proprietary Bluetooth stack with BlueZ and adding BLE HID support via Google Bumble.
+This project enables BLE HID support on the Kindle MT8110 Bellatrix (MediaTek MT8512) using Google Bumble, a userspace Bluetooth stack that bypasses kernel limitations.
 
 ## Quick Start
 
@@ -21,13 +21,9 @@ See `QUICK_START.md` for detailed usage instructions.
 
 ## What Works
 
-- **BLE HID Devices** - Keyboards, mice, game controllers (via Bumble)
-- **Classic Bluetooth** - Discovery, pairing, connections (via BlueZ)
-- **BLE Scanning** - Device discovery and basic connections (via BlueZ)
+- **BLE HID Devices** - Keyboards, mice, game controllers via Google Bumble userspace stack
 
-## Current Implementation
-
-### BLE HID Solution (Working)
+## Implementation
 
 **Technology:** Google Bumble - Userspace Bluetooth stack
 
@@ -47,66 +43,37 @@ The Kindle's kernel (4.9.77-lab126) has a bug where SMP (Security Manager Protoc
 
 See `bumble_ble_hid/README.md` for technical details.
 
-### Classic Bluetooth (Working)
-
-**Technology:** BlueZ 5.43 + vhci_stpbt_bridge
-
-**Architecture:**
-```
-MediaTek MT8512 → /dev/stpbt → vhci_stpbt_bridge → /dev/vhci → BlueZ
-```
-
-**Components:**
-- BlueZ 5.43 deployed to `/mnt/us/bluetooth/` (musl-based)
-- VHCI bridge: `vhci_stpbt_bridge_musl`
-- Full BlueZ tools: bluetoothctl, btmon, etc.
-
-**Usage:**
-```bash
-ssh root@192.168.0.65
-/mnt/us/bluetooth/scripts/start_bluez.sh
-export LD_LIBRARY_PATH=/mnt/us/bluetooth/libs
-/mnt/us/bluetooth/bin/ld-musl-armhf.so.1 /mnt/us/bluetooth/bin/bluetoothctl
-```
-
 ## Project Structure
 
 ```
 kindle/
-├── README.md                           - This file
-├── QUICK_START.md                      - User guide
+├── README.md                              - This file
+├── QUICK_START.md                         - User guide
 │
-├── src/
-│   ├── vhci_stpbt_bridge.c            - VHCI bridge (Classic BT)
-│   ├── pty_stpbt_bridge.c             - PTY experiment (reference)
-│   └── pty_stpbt_bridge_ldisc.c       - PTY with line discipline (reference)
+├── bumble_ble_hid/                        - BLE HID implementation
+│   ├── README.md                          - Technical details
+│   ├── USAGE_EXAMPLES.md                  - Usage examples
+│   ├── DAEMON_NOTES.md                    - Daemon information
+│   ├── kindle_ble_hid.py                  - Main implementation
+│   ├── ble_hid_daemon.py                  - Persistent daemon
+│   ├── kindle_ble_hid.sh                  - Helper script
+│   └── ble-hid-init.sh                    - Init script
 │
-├── bumble_ble_hid/                    - BLE HID solution
-│   ├── README.md                      - Technical details
-│   ├── USAGE_EXAMPLES.md              - Usage examples
-│   ├── DAEMON_NOTES.md                - Daemon information
-│   ├── kindle_ble_hid.py              - Main implementation
-│   ├── ble_hid_daemon.py              - Persistent daemon
-│   ├── kindle_ble_hid.sh              - Helper script
-│   └── ble-hid-init.sh                - Init script
-│
-├── bluez_full/                        - BlueZ deployment (102 MB)
-│   ├── bin/                           - BlueZ tools
-│   ├── libexec/bluetooth/             - bluetoothd daemon
-│   └── libs/                          - Shared libraries
-│
-├── vhci_stpbt_bridge_musl             - Working VHCI bridge binary
+├── old/                                   - Failed experiments (archived)
+│   ├── README.md                          - Failure analysis summary
+│   ├── bluez/                             - BlueZ implementation (Classic BT only)
+│   ├── src/                               - Failed experiment sources
+│   └── docs/                              - Failed experiment documentation
 │
 └── Documentation
-    ├── BLE_SMP_LIMITATION.md          - Kernel SMP bug analysis
-    ├── BLE_SMP_RESEARCH.md            - Solutions research
-    ├── PTY_EXPERIMENT_SUMMARY_FINAL.md - PTY approach failure analysis
-    ├── BUMBLE_BLE_HID_FIXES.md        - Bumble API compatibility fixes
-    ├── BUMBLE_IMPLEMENTATION_SUMMARY.md - Implementation details
-    ├── BLUETOOTH_ORGANIZATION.md      - Device file organization
-    ├── DAEMON_INSTALLATION.md         - Daemon setup
-    ├── kindle_system_info.md          - Hardware and system info
-    └── kindle_kernel_config.txt       - Full kernel config
+    ├── BLE_SMP_LIMITATION.md              - Kernel SMP bug analysis
+    ├── BLE_SMP_RESEARCH.md                - Solutions research
+    ├── BUMBLE_BLE_HID_FIXES.md            - Bumble API compatibility fixes
+    ├── BUMBLE_IMPLEMENTATION_SUMMARY.md   - Implementation details
+    ├── BLUETOOTH_ORGANIZATION.md          - Device file organization
+    ├── DAEMON_INSTALLATION.md             - Daemon setup
+    ├── kindle_system_info.md              - Hardware and system info
+    └── kindle_kernel_config.txt           - Full kernel config
 ```
 
 ## Technical Details
@@ -117,25 +84,10 @@ kindle/
 - **Kernel:** Linux 4.9.77-lab126
 - **Bluetooth:** MediaTek CONSYS via `/dev/stpbt`
 
-### Build Information
-```
-Target: arm-linux-gnueabi (EABI5)
-ABI: EABI5 (soft-float or softfp VFP)
-Architecture: ARMv7-A (Cortex-A53)
-Kernel: 4.9.77-lab126
-glibc: 2.20 (on device)
-musl: Used for BlueZ cross-compilation
-```
-
-### Cross-Compilation
-```bash
-# Uncomment in Makefile for ARM build:
-# CC = arm-linux-gnueabihf-gcc
-# CFLAGS += -march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=softfp -mtune=cortex-a53
-# LDFLAGS += -static
-
-make
-```
+### Software Stack
+- Python 3.8 (cross-compiled for ARMv7-A)
+- Google Bumble 0.0.200
+- cryptography library 43.0.0
 
 ## Known Limitations
 
@@ -152,27 +104,23 @@ The current daemon implementation supports only one BLE HID device at a time. Se
 
 ## Development History
 
-This project went through several approaches:
+This project went through several approaches before arriving at the working Google Bumble solution:
 
-1. **Classic Bluetooth via VHCI** - ✓ Working
-   - Built vhci_stpbt_bridge to connect `/dev/stpbt` to BlueZ
-   - Deployed full BlueZ 5.43 stack
+1. **BLE via BlueZ/VHCI** - Failed (kernel SMP bug)
+   - Kernel doesn't properly initialize SMP for virtual HCI devices
+   - Prevents BLE HID pairing that requires encryption
+   - Archived in `old/bluez/`
 
-2. **BLE via VHCI** - ✗ Failed (kernel SMP bug)
-   - Discovered kernel doesn't initialize SMP for virtual HCI
-   - Multiple direct connection attempts failed
-
-3. **PTY + hci_uart approach** - ✗ Failed (hardware initialization)
-   - Attempted to use hci_uart driver instead of VHCI
-   - Successfully attached line discipline but no hci0 created
+2. **PTY + hci_uart approach** - Failed (hardware initialization)
    - Hardware initialization requirements cannot be met with PTY
+   - Archived in `old/src/` and `old/docs/`
 
-4. **Bumble userspace stack** - ✓ Working (final solution)
+3. **Google Bumble userspace stack** - Working (final solution)
    - Implements full BLE stack including SMP in userspace
    - Bypasses kernel Bluetooth code entirely
    - Successfully pairs and operates BLE HID devices
 
-All experimental code and detailed failure analysis preserved in git history under tag `pre-cleanup`.
+See `old/README.md` for detailed failure analysis. Complete experimental history preserved in git under tag `pre-cleanup`.
 
 ## Device Connection
 
