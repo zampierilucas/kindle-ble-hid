@@ -2,32 +2,25 @@ CC = gcc
 CFLAGS = -Wall -Wextra -O2 -D_GNU_SOURCE
 LDFLAGS =
 
-# ARM cross-compilation settings (uncomment for Kindle)
+# ARM cross-compilation for Kindle
 # CC = arm-linux-gnueabihf-gcc
+# CFLAGS += -march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=softfp -mtune=cortex-a53
 # LDFLAGS += -static
 
 SRCDIR = src
-OBJDIR = obj
 BINDIR = .
 
-SOURCES = $(wildcard $(SRCDIR)/*.c)
-PROGRAMS = $(patsubst $(SRCDIR)/%.c,%,$(SOURCES))
+# Working components only
+WORKING_SOURCES = $(SRCDIR)/vhci_stpbt_bridge.c
 
-all: $(PROGRAMS)
+all: vhci_stpbt_bridge
 
-%: $(SRCDIR)/%.c
-	@mkdir -p $(OBJDIR)
+vhci_stpbt_bridge: $(SRCDIR)/vhci_stpbt_bridge.c
 	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
-	@echo "Built: $@"
-
-# Specific target for PTY bridge
-pty_stpbt_bridge: $(SRCDIR)/pty_stpbt_bridge.c
-	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
-	@echo "Built PTY bridge: $@"
+	@echo "Built VHCI bridge: $@"
 
 clean:
-	rm -f $(PROGRAMS)
-	rm -rf $(OBJDIR)
-	@echo "Cleaned all binaries"
+	rm -f vhci_stpbt_bridge
+	@echo "Cleaned binaries"
 
 .PHONY: all clean
