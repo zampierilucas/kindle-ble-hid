@@ -147,7 +147,15 @@ class BLEHIDDaemon:
                 logger.info(f"Discovering HID service on {address}...")
                 if await self.host.discover_hid_service():
                     logger.info(f"Creating UHID device for {address}...")
-                    await self.host.create_uhid_device(f"BLE HID {address}")
+                    uhid_created = await self.host.create_uhid_device(f"BLE HID {address}")
+                    if not uhid_created:
+                        logger.error(f"Failed to create UHID device for {address}")
+                        raise Exception("UHID device creation failed")
+
+                    # Now subscribe to HID reports (AFTER UHID device is created)
+                    logger.info(f"Subscribing to HID reports from {address}...")
+                    await self.host.subscribe_to_reports()
+
                     logger.info(f"Successfully connected to {address}")
 
                     # Store connection info

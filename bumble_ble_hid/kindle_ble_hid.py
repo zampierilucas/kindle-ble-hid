@@ -163,7 +163,7 @@ class UHIDDevice:
 
         try:
             bytes_written = os.write(self.fd, event)
-            logging.debug(f"UHID sent {bytes_written} bytes for report: {report_data.hex()}")
+            print(color(f"    UHID: Sent {bytes_written} bytes to kernel", 'blue'))
         except OSError as e:
             logging.error(f"Failed to send input report: {e}")
 
@@ -424,15 +424,18 @@ class BLEHIDHost:
 
                 if report_type == HID_REPORT_TYPE_INPUT:
                     self.hid_reports[report_id] = char
-
-                    # Subscribe to notifications
-                    try:
-                        await self.peer.subscribe(char, self._on_hid_report)
-                        print(color(f"    Subscribed to input report {report_id}", 'green'))
-                    except Exception as e:
-                        print(color(f"    Failed to subscribe: {e}", 'yellow'))
+                    # Don't subscribe yet - will do that after UHID device is created
 
         return True
+
+    async def subscribe_to_reports(self):
+        """Subscribe to HID input report notifications"""
+        for report_id, char in self.hid_reports.items():
+            try:
+                await self.peer.subscribe(char, self._on_hid_report)
+                print(color(f">>> Subscribed to input report {report_id}", 'green'))
+            except Exception as e:
+                print(color(f">>> Failed to subscribe to report {report_id}: {e}", 'yellow'))
 
     def _on_hid_report(self, value):
         """Handle incoming HID input reports"""
