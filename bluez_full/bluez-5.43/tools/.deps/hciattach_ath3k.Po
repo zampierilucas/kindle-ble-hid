@@ -1,0 +1,73 @@
+tools/hciattach_ath3k.o: tools/hciattach_ath3k.c \
+ /usr/include/stdc-predef.h config.h /usr/include/fortify/stdio.h \
+ /usr/include/stdio.h /usr/include/features.h \
+ /usr/include/bits/alltypes.h /usr/include/fortify/fortify-headers.h \
+ /usr/include/errno.h /usr/include/bits/errno.h \
+ /usr/include/fortify/unistd.h /usr/include/unistd.h \
+ /usr/include/bits/posix.h /usr/include/fortify/stdlib.h \
+ /usr/include/stdlib.h /usr/include/alloca.h /usr/include/limits.h \
+ /usr/include/bits/limits.h /usr/include/fortify/string.h \
+ /usr/include/string.h /usr/include/fortify/strings.h \
+ /usr/include/strings.h /usr/include/ctype.h /usr/include/time.h \
+ /usr/include/sys/time.h /usr/include/fortify/sys/select.h \
+ /usr/include/sys/select.h /usr/include/sys/types.h /usr/include/endian.h \
+ /usr/include/sys/param.h /usr/include/sys/resource.h \
+ /usr/include/bits/resource.h /usr/include/limits.h \
+ /usr/include/sys/ioctl.h /usr/include/bits/ioctl.h \
+ /usr/include/bits/ioctl_fix.h lib/bluetooth.h /usr/include/stdint.h \
+ /usr/include/bits/stdint.h /usr/include/byteswap.h \
+ /usr/include/netinet/in.h /usr/include/inttypes.h \
+ /usr/include/fortify/sys/socket.h /usr/include/sys/socket.h \
+ /usr/include/bits/socket.h /usr/include/fortify/fortify-headers.h \
+ lib/hci.h lib/hci_lib.h tools/hciattach.h /usr/include/termios.h \
+ /usr/include/bits/termios.h
+/usr/include/stdc-predef.h:
+config.h:
+/usr/include/fortify/stdio.h:
+/usr/include/stdio.h:
+/usr/include/features.h:
+/usr/include/bits/alltypes.h:
+/usr/include/fortify/fortify-headers.h:
+/usr/include/errno.h:
+/usr/include/bits/errno.h:
+/usr/include/fortify/unistd.h:
+/usr/include/unistd.h:
+/usr/include/bits/posix.h:
+/usr/include/fortify/stdlib.h:
+/usr/include/stdlib.h:
+/usr/include/alloca.h:
+/usr/include/limits.h:
+/usr/include/bits/limits.h:
+/usr/include/fortify/string.h:
+/usr/include/string.h:
+/usr/include/fortify/strings.h:
+/usr/include/strings.h:
+/usr/include/ctype.h:
+/usr/include/time.h:
+/usr/include/sys/time.h:
+/usr/include/fortify/sys/select.h:
+/usr/include/sys/select.h:
+/usr/include/sys/types.h:
+/usr/include/endian.h:
+/usr/include/sys/param.h:
+/usr/include/sys/resource.h:
+/usr/include/bits/resource.h:
+/usr/include/limits.h:
+/usr/include/sys/ioctl.h:
+/usr/include/bits/ioctl.h:
+/usr/include/bits/ioctl_fix.h:
+lib/bluetooth.h:
+/usr/include/stdint.h:
+/usr/include/bits/stdint.h:
+/usr/include/byteswap.h:
+/usr/include/netinet/in.h:
+/usr/include/inttypes.h:
+/usr/include/fortify/sys/socket.h:
+/usr/include/sys/socket.h:
+/usr/include/bits/socket.h:
+/usr/include/fortify/fortify-headers.h:
+lib/hci.h:
+lib/hci_lib.h:
+tools/hciattach.h:
+/usr/include/termios.h:
+/usr/include/bits/termios.h:

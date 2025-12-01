@@ -1,0 +1,82 @@
+monitor/control.o: monitor/control.c /usr/include/stdc-predef.h config.h \
+ /usr/include/fortify/stdio.h /usr/include/stdio.h \
+ /usr/include/features.h /usr/include/bits/alltypes.h \
+ /usr/include/fortify/fortify-headers.h /usr/include/stdbool.h \
+ /usr/include/errno.h /usr/include/bits/errno.h \
+ /usr/include/fortify/unistd.h /usr/include/unistd.h \
+ /usr/include/bits/posix.h /usr/include/fortify/stdlib.h \
+ /usr/include/stdlib.h /usr/include/alloca.h /usr/include/limits.h \
+ /usr/include/bits/limits.h /usr/include/fortify/string.h \
+ /usr/include/string.h /usr/include/fortify/strings.h \
+ /usr/include/strings.h /usr/include/sys/time.h \
+ /usr/include/fortify/sys/select.h /usr/include/sys/select.h \
+ /usr/include/fortify/sys/socket.h /usr/include/sys/socket.h \
+ /usr/include/bits/socket.h /usr/include/fortify/fortify-headers.h \
+ /usr/include/sys/un.h /usr/include/sys/types.h /usr/include/endian.h \
+ /usr/include/sys/stat.h /usr/include/bits/stat.h /usr/include/termios.h \
+ /usr/include/bits/termios.h /usr/include/fcntl.h \
+ /usr/include/bits/fcntl.h lib/bluetooth.h /usr/include/stdint.h \
+ /usr/include/bits/stdint.h /usr/include/byteswap.h \
+ /usr/include/netinet/in.h /usr/include/inttypes.h lib/hci.h lib/mgmt.h \
+ src/shared/util.h src/shared/btsnoop.h src/shared/mainloop.h \
+ /usr/include/signal.h /usr/include/bits/signal.h \
+ /usr/include/sys/epoll.h monitor/display.h monitor/packet.h \
+ monitor/hcidump.h monitor/ellisys.h monitor/tty.h monitor/control.h
+/usr/include/stdc-predef.h:
+config.h:
+/usr/include/fortify/stdio.h:
+/usr/include/stdio.h:
+/usr/include/features.h:
+/usr/include/bits/alltypes.h:
+/usr/include/fortify/fortify-headers.h:
+/usr/include/stdbool.h:
+/usr/include/errno.h:
+/usr/include/bits/errno.h:
+/usr/include/fortify/unistd.h:
+/usr/include/unistd.h:
+/usr/include/bits/posix.h:
+/usr/include/fortify/stdlib.h:
+/usr/include/stdlib.h:
+/usr/include/alloca.h:
+/usr/include/limits.h:
+/usr/include/bits/limits.h:
+/usr/include/fortify/string.h:
+/usr/include/string.h:
+/usr/include/fortify/strings.h:
+/usr/include/strings.h:
+/usr/include/sys/time.h:
+/usr/include/fortify/sys/select.h:
+/usr/include/sys/select.h:
+/usr/include/fortify/sys/socket.h:
+/usr/include/sys/socket.h:
+/usr/include/bits/socket.h:
+/usr/include/fortify/fortify-headers.h:
+/usr/include/sys/un.h:
+/usr/include/sys/types.h:
+/usr/include/endian.h:
+/usr/include/sys/stat.h:
+/usr/include/bits/stat.h:
+/usr/include/termios.h:
+/usr/include/bits/termios.h:
+/usr/include/fcntl.h:
+/usr/include/bits/fcntl.h:
+lib/bluetooth.h:
+/usr/include/stdint.h:
+/usr/include/bits/stdint.h:
+/usr/include/byteswap.h:
+/usr/include/netinet/in.h:
+/usr/include/inttypes.h:
+lib/hci.h:
+lib/mgmt.h:
+src/shared/util.h:
+src/shared/btsnoop.h:
+src/shared/mainloop.h:
+/usr/include/signal.h:
+/usr/include/bits/signal.h:
+/usr/include/sys/epoll.h:
+monitor/display.h:
+monitor/packet.h:
+monitor/hcidump.h:
+monitor/ellisys.h:
+monitor/tty.h:
+monitor/control.h:

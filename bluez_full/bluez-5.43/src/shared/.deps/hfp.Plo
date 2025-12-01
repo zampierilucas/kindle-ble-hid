@@ -1,0 +1,45 @@
+src/shared/hfp.lo: src/shared/hfp.c /usr/include/stdc-predef.h config.h \
+ /usr/include/fortify/stdio.h /usr/include/stdio.h \
+ /usr/include/features.h /usr/include/bits/alltypes.h \
+ /usr/include/fortify/fortify-headers.h /usr/include/fortify/unistd.h \
+ /usr/include/unistd.h /usr/include/bits/posix.h \
+ /usr/include/fortify/string.h /usr/include/string.h \
+ /usr/include/fortify/strings.h /usr/include/strings.h \
+ /usr/include/stdarg.h /usr/include/ctype.h src/shared/util.h \
+ /usr/include/stdint.h /usr/include/bits/stdint.h \
+ /usr/include/fortify/stdlib.h /usr/include/stdlib.h \
+ /usr/include/alloca.h /usr/include/limits.h /usr/include/bits/limits.h \
+ /usr/include/byteswap.h src/shared/ringbuf.h /usr/include/stdbool.h \
+ src/shared/queue.h src/shared/io.h /usr/include/sys/uio.h \
+ src/shared/hfp.h
+/usr/include/stdc-predef.h:
+config.h:
+/usr/include/fortify/stdio.h:
+/usr/include/stdio.h:
+/usr/include/features.h:
+/usr/include/bits/alltypes.h:
+/usr/include/fortify/fortify-headers.h:
+/usr/include/fortify/unistd.h:
+/usr/include/unistd.h:
+/usr/include/bits/posix.h:
+/usr/include/fortify/string.h:
+/usr/include/string.h:
+/usr/include/fortify/strings.h:
+/usr/include/strings.h:
+/usr/include/stdarg.h:
+/usr/include/ctype.h:
+src/shared/util.h:
+/usr/include/stdint.h:
+/usr/include/bits/stdint.h:
+/usr/include/fortify/stdlib.h:
+/usr/include/stdlib.h:
+/usr/include/alloca.h:
+/usr/include/limits.h:
+/usr/include/bits/limits.h:
+/usr/include/byteswap.h:
+src/shared/ringbuf.h:
+/usr/include/stdbool.h:
+src/shared/queue.h:
+src/shared/io.h:
+/usr/include/sys/uio.h:
+src/shared/hfp.h:

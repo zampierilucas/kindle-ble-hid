@@ -1,0 +1,21 @@
+tools/csr_3wire.o: tools/csr_3wire.c /usr/include/stdc-predef.h config.h \
+ /usr/include/fortify/stdio.h /usr/include/stdio.h \
+ /usr/include/features.h /usr/include/bits/alltypes.h \
+ /usr/include/fortify/fortify-headers.h /usr/include/errno.h \
+ /usr/include/bits/errno.h /usr/include/stdint.h \
+ /usr/include/bits/stdint.h tools/csr.h /usr/include/termios.h \
+ /usr/include/bits/termios.h
+/usr/include/stdc-predef.h:
+config.h:
+/usr/include/fortify/stdio.h:
+/usr/include/stdio.h:
+/usr/include/features.h:
+/usr/include/bits/alltypes.h:
+/usr/include/fortify/fortify-headers.h:
+/usr/include/errno.h:
+/usr/include/bits/errno.h:
+/usr/include/stdint.h:
+/usr/include/bits/stdint.h:
+tools/csr.h:
+/usr/include/termios.h:
+/usr/include/bits/termios.h:

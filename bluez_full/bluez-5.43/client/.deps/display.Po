@@ -1,0 +1,38 @@
+client/display.o: client/display.c /usr/include/stdc-predef.h config.h \
+ /usr/include/fortify/stdio.h /usr/include/stdio.h \
+ /usr/include/features.h /usr/include/bits/alltypes.h \
+ /usr/include/fortify/fortify-headers.h /usr/include/fortify/stdlib.h \
+ /usr/include/stdlib.h /usr/include/alloca.h /usr/include/limits.h \
+ /usr/include/bits/limits.h /usr/include/stdarg.h /usr/include/stdbool.h \
+ /usr/include/ctype.h /usr/include/readline/readline.h \
+ /usr/include/readline/rlstdc.h /usr/include/readline/rltypedefs.h \
+ /usr/include/readline/keymaps.h /usr/include/readline/chardefs.h \
+ /usr/include/fortify/string.h /usr/include/string.h \
+ /usr/include/fortify/strings.h /usr/include/strings.h \
+ /usr/include/readline/tilde.h client/display.h
+/usr/include/stdc-predef.h:
+config.h:
+/usr/include/fortify/stdio.h:
+/usr/include/stdio.h:
+/usr/include/features.h:
+/usr/include/bits/alltypes.h:
+/usr/include/fortify/fortify-headers.h:
+/usr/include/fortify/stdlib.h:
+/usr/include/stdlib.h:
+/usr/include/alloca.h:
+/usr/include/limits.h:
+/usr/include/bits/limits.h:
+/usr/include/stdarg.h:
+/usr/include/stdbool.h:
+/usr/include/ctype.h:
+/usr/include/readline/readline.h:
+/usr/include/readline/rlstdc.h:
+/usr/include/readline/rltypedefs.h:
+/usr/include/readline/keymaps.h:
+/usr/include/readline/chardefs.h:
+/usr/include/fortify/string.h:
+/usr/include/string.h:
+/usr/include/fortify/strings.h:
+/usr/include/strings.h:
+/usr/include/readline/tilde.h:
+client/display.h:

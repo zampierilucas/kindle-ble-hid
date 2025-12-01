@@ -1,0 +1,9 @@
+monitor/crc.o: monitor/crc.c /usr/include/stdc-predef.h config.h \
+ monitor/crc.h /usr/include/stdint.h /usr/include/bits/alltypes.h \
+ /usr/include/bits/stdint.h
+/usr/include/stdc-predef.h:
+config.h:
+monitor/crc.h:
+/usr/include/stdint.h:
+/usr/include/bits/alltypes.h:
+/usr/include/bits/stdint.h:

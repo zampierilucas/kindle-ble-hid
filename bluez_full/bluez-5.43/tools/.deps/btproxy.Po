@@ -1,0 +1,76 @@
+tools/btproxy.o: tools/btproxy.c /usr/include/stdc-predef.h config.h \
+ /usr/include/fortify/stdio.h /usr/include/stdio.h \
+ /usr/include/features.h /usr/include/bits/alltypes.h \
+ /usr/include/fortify/fortify-headers.h /usr/include/errno.h \
+ /usr/include/bits/errno.h /usr/include/ctype.h /usr/include/fcntl.h \
+ /usr/include/bits/fcntl.h /usr/include/fortify/unistd.h \
+ /usr/include/unistd.h /usr/include/bits/posix.h \
+ /usr/include/fortify/stdlib.h /usr/include/stdlib.h \
+ /usr/include/alloca.h /usr/include/limits.h /usr/include/bits/limits.h \
+ /usr/include/fortify/string.h /usr/include/string.h \
+ /usr/include/fortify/strings.h /usr/include/strings.h \
+ /usr/include/getopt.h /usr/include/stdbool.h /usr/include/termios.h \
+ /usr/include/bits/termios.h /usr/include/sys/stat.h \
+ /usr/include/bits/stat.h /usr/include/fortify/sys/socket.h \
+ /usr/include/sys/socket.h /usr/include/bits/socket.h \
+ /usr/include/fortify/fortify-headers.h /usr/include/sys/un.h \
+ /usr/include/netdb.h /usr/include/netinet/in.h /usr/include/inttypes.h \
+ /usr/include/stdint.h /usr/include/bits/stdint.h \
+ /usr/include/arpa/inet.h src/shared/util.h /usr/include/byteswap.h \
+ src/shared/mainloop.h /usr/include/signal.h /usr/include/bits/signal.h \
+ /usr/include/sys/epoll.h /usr/include/sys/types.h /usr/include/endian.h \
+ /usr/include/fortify/sys/select.h /usr/include/sys/select.h \
+ src/shared/ecc.h monitor/bt.h
+/usr/include/stdc-predef.h:
+config.h:
+/usr/include/fortify/stdio.h:
+/usr/include/stdio.h:
+/usr/include/features.h:
+/usr/include/bits/alltypes.h:
+/usr/include/fortify/fortify-headers.h:
+/usr/include/errno.h:
+/usr/include/bits/errno.h:
+/usr/include/ctype.h:
+/usr/include/fcntl.h:
+/usr/include/bits/fcntl.h:
+/usr/include/fortify/unistd.h:
+/usr/include/unistd.h:
+/usr/include/bits/posix.h:
+/usr/include/fortify/stdlib.h:
+/usr/include/stdlib.h:
+/usr/include/alloca.h:
+/usr/include/limits.h:
+/usr/include/bits/limits.h:
+/usr/include/fortify/string.h:
+/usr/include/string.h:
+/usr/include/fortify/strings.h:
+/usr/include/strings.h:
+/usr/include/getopt.h:
+/usr/include/stdbool.h:
+/usr/include/termios.h:
+/usr/include/bits/termios.h:
+/usr/include/sys/stat.h:
+/usr/include/bits/stat.h:
+/usr/include/fortify/sys/socket.h:
+/usr/include/sys/socket.h:
+/usr/include/bits/socket.h:
+/usr/include/fortify/fortify-headers.h:
+/usr/include/sys/un.h:
+/usr/include/netdb.h:
+/usr/include/netinet/in.h:
+/usr/include/inttypes.h:
+/usr/include/stdint.h:
+/usr/include/bits/stdint.h:
+/usr/include/arpa/inet.h:
+src/shared/util.h:
+/usr/include/byteswap.h:
+src/shared/mainloop.h:
+/usr/include/signal.h:
+/usr/include/bits/signal.h:
+/usr/include/sys/epoll.h:
+/usr/include/sys/types.h:
+/usr/include/endian.h:
+/usr/include/fortify/sys/select.h:
+/usr/include/sys/select.h:
+src/shared/ecc.h:
+monitor/bt.h:

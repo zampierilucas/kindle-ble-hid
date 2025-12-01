@@ -1,0 +1,416 @@
+Building BlueZ with Alpine ARM (musl libc)...
+=== Installing build dependencies ===
+fetch https://dl-cdn.alpinelinux.org/alpine/v3.18/main/armv7/APKINDEX.tar.gz
+fetch https://dl-cdn.alpinelinux.org/alpine/v3.18/community/armv7/APKINDEX.tar.gz
+(1/137) Installing libgcc (12.2.1_git20220924-r10)
+(2/137) Installing libstdc++ (12.2.1_git20220924-r10)
+(3/137) Installing zstd-libs (1.5.5-r4)
+(4/137) Installing binutils (2.40-r8)
+(5/137) Installing libmagic (5.45-r0)
+(6/137) Installing file (5.45-r0)
+(7/137) Installing libgomp (12.2.1_git20220924-r10)
+(8/137) Installing libatomic (12.2.1_git20220924-r10)
+(9/137) Installing gmp (6.2.1-r3)
+(10/137) Installing isl26 (0.26-r1)
+(11/137) Installing mpfr4 (4.2.0_p12-r0)
+(12/137) Installing mpc1 (1.3.1-r1)
+(13/137) Installing gcc (12.2.1_git20220924-r10)
+(14/137) Installing libstdc++-dev (12.2.1_git20220924-r10)
+(15/137) Installing musl-dev (1.2.4-r3)
+(16/137) Installing libc-dev (0.7.2-r5)
+(17/137) Installing g++ (12.2.1_git20220924-r10)
+(18/137) Installing make (4.4.1-r1)
+(19/137) Installing fortify-headers (1.1-r3)
+(20/137) Installing patch (2.7.6-r10)
+(21/137) Installing build-base (0.5-r3)
+(22/137) Installing libblkid (2.38.1-r8)
+(23/137) Installing libuuid (2.38.1-r8)
+(24/137) Installing libfdisk (2.38.1-r8)
+(25/137) Installing libmount (2.38.1-r8)
+(26/137) Installing libsmartcols (2.38.1-r8)
+(27/137) Installing pkgconf (1.9.5-r0)
+(28/137) Installing util-linux-dev (2.38.1-r8)
+(29/137) Installing dbus-libs (1.14.8-r0)
+(30/137) Installing dbus-dev (1.14.8-r0)
+(31/137) Installing udev-init-scripts (35-r1)
+(32/137) Installing eudev-libs (3.2.11-r8)
+(33/137) Installing xz-libs (5.4.3-r1)
+(34/137) Installing kmod-libs (30-r3)
+(35/137) Installing eudev (3.2.11-r8)
+(36/137) Installing eudev-dev (3.2.11-r8)
+(37/137) Installing libbz2 (1.0.8-r5)
+(38/137) Installing bzip2-dev (1.0.8-r5)
+(39/137) Installing libxml2 (2.11.8-r3)
+(40/137) Installing libxml2-utils (2.11.8-r3)
+(41/137) Installing docbook-xml (4.5-r8)
+Executing docbook-xml-4.5-r8.post-install
+(42/137) Installing libgpg-error (1.47-r1)
+(43/137) Installing libgcrypt (1.10.2-r1)
+(44/137) Installing libxslt (1.1.38-r1)
+(45/137) Installing docbook-xsl (1.79.2-r8)
+Executing docbook-xsl-1.79.2-r8.post-install
+(46/137) Installing xz (5.4.3-r1)
+(47/137) Installing gettext-asprintf (0.21.1-r7)
+(48/137) Installing libintl (0.21.1-r7)
+(49/137) Installing ncurses-terminfo-base (6.4_p20230506-r0)
+(50/137) Installing libncursesw (6.4_p20230506-r0)
+(51/137) Installing libunistring (1.1-r1)
+(52/137) Installing gettext-libs (0.21.1-r7)
+(53/137) Installing gettext-envsubst (0.21.1-r7)
+(54/137) Installing gettext (0.21.1-r7)
+(55/137) Installing gettext-dev (0.21.1-r7)
+(56/137) Installing libexpat (2.7.0-r0)
+(57/137) Installing libffi (3.4.4-r2)
+(58/137) Installing gdbm (1.23-r1)
+(59/137) Installing mpdecimal (2.5.1-r2)
+(60/137) Installing libpanelw (6.4_p20230506-r0)
+(61/137) Installing readline (8.2.1-r1)
+(62/137) Installing sqlite-libs (3.41.2-r3)
+(63/137) Installing python3 (3.11.12-r1)
+(64/137) Installing python3-pycache-pyc0 (3.11.12-r1)
+(65/137) Installing pyc (0.1-r0)
+(66/137) Installing python3-pyc (3.11.12-r1)
+(67/137) Installing pcre2 (10.42-r1)
+(68/137) Installing glib (2.76.6-r0)
+(69/137) Installing linux-headers (6.3-r0)
+(70/137) Installing libffi-dev (3.4.4-r2)
+(71/137) Installing bsd-compat-headers (0.7.2-r5)
+(72/137) Installing libformw (6.4_p20230506-r0)
+(73/137) Installing libmenuw (6.4_p20230506-r0)
+(74/137) Installing libncurses++ (6.4_p20230506-r0)
+(75/137) Installing ncurses-dev (6.4_p20230506-r0)
+(76/137) Installing libedit (20221030.3.1-r1)
+(77/137) Installing libedit-dev (20221030.3.1-r1)
+(78/137) Installing zlib-dev (1.2.13-r1)
+(79/137) Installing libpcre2-16 (10.42-r1)
+(80/137) Installing libpcre2-32 (10.42-r1)
+(81/137) Installing pcre2-dev (10.42-r1)
+(82/137) Installing glib-dev (2.76.6-r0)
+(83/137) Installing gettext-static (0.21.1-r7)
+(84/137) Installing glib-static (2.76.6-r0)
+(85/137) Installing xz-dev (5.4.3-r1)
+(86/137) Installing libxml2-dev (2.11.8-r3)
+(87/137) Installing cairo-tools (1.17.8-r1)
+(88/137) Installing brotli-libs (1.0.9-r14)
+(89/137) Installing libpng (1.6.44-r0)
+(90/137) Installing freetype (2.13.0-r5)
+(91/137) Installing fontconfig (2.14.2-r3)
+(92/137) Installing expat (2.7.0-r0)
+(93/137) Installing expat-dev (2.7.0-r0)
+(94/137) Installing brotli (1.0.9-r14)
+(95/137) Installing brotli-dev (1.0.9-r14)
+(96/137) Installing libpng-dev (1.6.44-r0)
+(97/137) Installing freetype-dev (2.13.0-r5)
+(98/137) Installing fontconfig-dev (2.14.2-r3)
+(99/137) Installing libxau (1.0.11-r2)
+(100/137) Installing xorgproto (2022.2-r0)
+(101/137) Installing libxau-dev (1.0.11-r2)
+(102/137) Installing libmd (1.0.4-r2)
+(103/137) Installing libbsd (0.11.7-r1)
+(104/137) Installing libxdmcp (1.1.4-r2)
+(105/137) Installing libxcb (1.15-r1)
+(106/137) Installing libx11 (1.8.7-r0)
+(107/137) Installing libxext (1.3.5-r2)
+(108/137) Installing xcb-proto (1.15.2-r2)
+(109/137) Installing xcb-proto-pyc (1.15.2-r2)
+(110/137) Installing libxdmcp-dev (1.1.4-r2)
+(111/137) Installing libxcb-dev (1.15-r1)
+(112/137) Installing xtrans (1.4.0-r3)
+(113/137) Installing libx11-dev (1.8.7-r0)
+(114/137) Installing libxext-dev (1.3.5-r2)
+(115/137) Installing libxrender (0.9.11-r3)
+(116/137) Installing libxrender-dev (0.9.11-r3)
+(117/137) Installing pixman (0.42.2-r1)
+(118/137) Installing pixman-dev (0.42.2-r1)
+(119/137) Installing util-macros (1.20.0-r0)
+(120/137) Installing xcb-util (0.4.1-r2)
+(121/137) Installing xcb-util-dev (0.4.1-r2)
+(122/137) Installing cairo (1.17.8-r1)
+(123/137) Installing cairo-gobject (1.17.8-r1)
+(124/137) Installing cairo-dev (1.17.8-r1)
+(125/137) Installing libltdl (2.4.7-r2)
+(126/137) Installing libtool (2.4.7-r2)
+(127/137) Installing gobject-introspection (1.76.1-r3)
+(128/137) Installing gobject-introspection-dev (1.76.1-r3)
+(129/137) Installing icu-data-en (73.2-r2)
+Executing icu-data-en-73.2-r2.post-install
+*
+* If you need ICU with non-English locales and legacy charset support, install
+* package icu-data-full.
+*
+(130/137) Installing icu-libs (73.2-r2)
+(131/137) Installing libical (3.0.16-r4)
+(132/137) Installing icu (73.2-r2)
+(133/137) Installing icu-dev (73.2-r2)
+(134/137) Installing libical-dev (3.0.16-r4)
+(135/137) Installing libhistory (8.2.1-r1)
+(136/137) Installing readline-dev (8.2.1-r1)
+(137/137) Installing readline-static (8.2.1-r1)
+Executing busybox-1.36.1-r7.trigger
+Executing eudev-3.2.11-r8.trigger
+Executing glib-2.76.6-r0.trigger
+No schema files found: doing nothing.
+OK: 354 MiB in 152 packages
+
+=== Configuring BlueZ 5.43 ===
+configure: WARNING: unrecognized options: --disable-mesh, --disable-midi
+checking for a BSD-compatible install... /usr/bin/install -c
+checking whether build environment is sane... yes
+checking for a thread-safe mkdir -p... ./install-sh -c -d
+checking for gawk... no
+checking for mawk... no
+checking for nawk... no
+checking for awk... awk
+checking whether make sets $(MAKE)... yes
+checking whether make supports nested variables... yes
+checking how to create a pax tar archive... none
+checking for style of include used by make... GNU
+checking for gcc... gcc
+checking whether the C compiler works... yes
+checking for C compiler default output file name... a.out
+checking for suffix of executables... 
+checking whether we are cross compiling... no
+checking for suffix of object files... o
+checking whether we are using the GNU C compiler... yes
+checking whether gcc accepts -g... yes
+checking for gcc option to accept ISO C89... none needed
+checking whether gcc understands -c and -o together... yes
+checking dependency style of gcc... gcc3
+checking how to run the C preprocessor... gcc -E
+checking for grep that handles long lines and -e... /bin/grep
+checking for egrep... /bin/grep -E
+checking for ANSI C header files... yes
+checking for sys/types.h... yes
+checking for sys/stat.h... yes
+checking for stdlib.h... yes
+checking for string.h... yes
+checking for memory.h... yes
+checking for strings.h... yes
+checking for inttypes.h... yes
+checking for stdint.h... yes
+checking for unistd.h... yes
+checking minix/config.h usability... no
+checking minix/config.h presence... no
+checking for minix/config.h... no
+checking whether it is safe to define __EXTENSIONS__... yes
+checking whether make supports nested variables... (cached) yes
+checking whether to enable maintainer-specific portions of Makefiles... no
+checking for pkg-config... /usr/bin/pkg-config
+checking pkg-config is at least version 0.9.0... yes
+checking for C/C++ restrict keyword... __restrict
+checking for gcc... (cached) gcc
+checking whether we are using the GNU C compiler... (cached) yes
+checking whether gcc accepts -g... (cached) yes
+checking for gcc option to accept ISO C89... (cached) none needed
+checking whether gcc understands -c and -o together... (cached) yes
+checking dependency style of gcc... (cached) gcc3
+checking whether gcc accepts -fPIE... yes
+checking build system type... armv7l-unknown-linux-gnueabihf
+checking host system type... armv7l-unknown-linux-gnueabihf
+checking how to print strings... printf
+checking for a sed that does not truncate output... /bin/sed
+checking for fgrep... /bin/grep -F
+checking for ld used by gcc... /usr/armv7-alpine-linux-musleabihf/bin/ld
+checking if the linker (/usr/armv7-alpine-linux-musleabihf/bin/ld) is GNU ld... yes
+checking for BSD- or MS-compatible name lister (nm)... /usr/bin/nm -B
+checking the name lister (/usr/bin/nm -B) interface... BSD nm
+checking whether ln -s works... yes
+checking the maximum length of command line arguments... 98304
+checking whether the shell understands some XSI constructs... yes
+checking whether the shell understands "+="... no
+checking how to convert armv7l-unknown-linux-gnueabihf file names to armv7l-unknown-linux-gnueabihf format... func_convert_file_noop
+checking how to convert armv7l-unknown-linux-gnueabihf file names to toolchain format... func_convert_file_noop
+checking for /usr/armv7-alpine-linux-musleabihf/bin/ld option to reload object files... -r
+checking for objdump... objdump
+checking how to recognize dependent libraries... pass_all
+checking for dlltool... no
+checking how to associate runtime and link libraries... printf %s\n
+checking for ar... ar
+checking for archiver @FILE support... @
+checking for strip... strip
+checking for ranlib... ranlib
+checking command to parse /usr/bin/nm -B output from gcc object... ok
+checking for sysroot... no
+checking for mt... no
+checking if : is a manifest tool... no
+checking for dlfcn.h... yes
+checking for objdir... .libs
+checking if gcc supports -fno-rtti -fno-exceptions... no
+checking for gcc option to produce PIC... -fPIC -DPIC
+checking if gcc PIC flag -fPIC -DPIC works... yes
+checking if gcc static flag -static works... yes
+checking if gcc supports -c -o file.o... yes
+checking if gcc supports -c -o file.o... (cached) yes
+checking whether the gcc linker (/usr/armv7-alpine-linux-musleabihf/bin/ld) supports shared libraries... yes
+checking whether -lc should be explicitly linked in... no
+checking dynamic linker characteristics... GNU/Linux ld.so
+checking how to hardcode library paths into programs... immediate
+checking whether stripping libraries is possible... yes
+checking if libtool supports shared libraries... yes
+checking whether to build shared libraries... yes
+checking whether to build static libraries... no
+checking for signalfd... yes
+checking for clock_gettime in -lrt... yes
+checking for pthread_create in -lpthread... yes
+checking for dlopen in -ldl... yes
+checking linux/types.h usability... yes
+checking linux/types.h presence... yes
+checking for linux/types.h... yes
+checking linux/if_alg.h usability... yes
+checking linux/if_alg.h presence... yes
+checking for linux/if_alg.h... yes
+checking for GLIB... yes
+checking for DBUS... yes
+checking D-Bus configuration directory... /etc
+checking D-Bus system bus services dir... /usr/share/dbus-1/system-services
+checking D-Bus session bus services dir... /usr/share/dbus-1/services
+checking for UDEV... yes
+checking for udev_hwdb_new in -ludev... yes
+checking udev directory... /lib/udev
+checking readline/readline.h usability... yes
+checking readline/readline.h presence... yes
+checking for readline/readline.h... yes
+checking that generated files are newer than configure... done
+configure: creating ./config.status
+config.status: creating Makefile
+config.status: creating src/bluetoothd.8
+config.status: creating lib/bluez.pc
+config.status: creating config.h
+config.status: executing depfiles commands
+config.status: executing libtool commands
+configure: WARNING: unrecognized options: --disable-mesh, --disable-midi
+
+=== Building BlueZ ===
+libtool: link: gcc -I/usr/include/dbus-1.0 -I/usr/lib/dbus-1.0/include -I/usr/include/glib-2.0 -I/usr/lib/glib-2.0/include -g -O2 -o tools/mcaptest tools/mcaptest.o btio/btio.o src/log.o profiles/health/mcap.o  lib/.libs/libbluetooth-internal.a -lglib-2.0 -lintl -lrt
+libtool: link: gcc -I/usr/include/dbus-1.0 -I/usr/lib/dbus-1.0/include -I/usr/include/glib-2.0 -I/usr/lib/glib-2.0/include -g -O2 -o tools/bneptest tools/bneptest.o btio/btio.o src/log.o profiles/network/bnep.o  lib/.libs/libbluetooth-internal.a -lglib-2.0 -lintl
+libtool: link: gcc -I/usr/include/dbus-1.0 -I/usr/lib/dbus-1.0/include -I/usr/include/glib-2.0 -I/usr/lib/glib-2.0/include -g -O2 -o tools/ibeacon tools/ibeacon.o  src/.libs/libshared-mainloop.a
+/bin/sh ./libtool  --tag=CC   --mode=link gcc    -I/usr/include/dbus-1.0 -I/usr/lib/dbus-1.0/include -I/usr/include/glib-2.0 -I/usr/lib/glib-2.0/include  -g -O2   -o emulator/hfp emulator/hfp.o src/libshared-mainloop.la 
+/bin/sh ./libtool  --tag=CC   --mode=link gcc    -I/usr/include/dbus-1.0 -I/usr/lib/dbus-1.0/include -I/usr/include/glib-2.0 -I/usr/lib/glib-2.0/include  -g -O2   -o peripheral/btsensor peripheral/main.o peripheral/efivars.o peripheral/attach.o peripheral/log.o peripheral/gap.o peripheral/gatt.o src/libshared-mainloop.la lib/libbluetooth-internal.la 
+libtool: link: gcc -I/usr/include/dbus-1.0 -I/usr/lib/dbus-1.0/include -I/usr/include/glib-2.0 -I/usr/lib/glib-2.0/include -g -O2 -o tools/btattach tools/btattach.o  src/.libs/libshared-mainloop.a
+libtool: link: gcc -I/usr/include/dbus-1.0 -I/usr/lib/dbus-1.0/include -I/usr/include/glib-2.0 -I/usr/lib/glib-2.0/include -g -O2 -o tools/oobtest tools/oobtest.o  lib/.libs/libbluetooth-internal.a src/.libs/libshared-mainloop.a
+libtool: link: gcc -I/usr/include/dbus-1.0 -I/usr/lib/dbus-1.0/include -I/usr/include/glib-2.0 -I/usr/lib/glib-2.0/include -g -O2 -o tools/btgatt-client tools/btgatt-client.o src/uuid-helper.o  src/.libs/libshared-mainloop.a lib/.libs/libbluetooth-internal.a
+libtool: link: gcc -I/usr/include/dbus-1.0 -I/usr/lib/dbus-1.0/include -I/usr/include/glib-2.0 -I/usr/lib/glib-2.0/include -g -O2 -o tools/btgatt-server tools/btgatt-server.o src/uuid-helper.o  src/.libs/libshared-mainloop.a lib/.libs/libbluetooth-internal.a
+libtool: link: gcc -I/usr/include/dbus-1.0 -I/usr/lib/dbus-1.0/include -I/usr/include/glib-2.0 -I/usr/lib/glib-2.0/include -g -O2 -o tools/obex-client-tool gobex/gobex.o gobex/gobex-defs.o gobex/gobex-packet.o gobex/gobex-header.o gobex/gobex-transfer.o gobex/gobex-apparam.o btio/btio.o tools/obex-client-tool.o  lib/.libs/libbluetooth-internal.a -lglib-2.0 -lintl -lreadline
+/bin/sh ./libtool  --tag=CC   --mode=link gcc    -I/usr/include/dbus-1.0 -I/usr/lib/dbus-1.0/include -I/usr/include/glib-2.0 -I/usr/lib/glib-2.0/include  -g -O2   -o tools/3dsp tools/3dsp.o src/libshared-mainloop.la 
+libtool: link: gcc -I/usr/include/dbus-1.0 -I/usr/lib/dbus-1.0/include -I/usr/include/glib-2.0 -I/usr/lib/glib-2.0/include -g -O2 -o tools/obex-server-tool gobex/gobex.o gobex/gobex-defs.o gobex/gobex-packet.o gobex/gobex-header.o gobex/gobex-transfer.o gobex/gobex-apparam.o btio/btio.o tools/obex-server-tool.o  lib/.libs/libbluetooth-internal.a -lglib-2.0 -lintl
+libtool: link: gcc -I/usr/include/dbus-1.0 -I/usr/lib/dbus-1.0/include -I/usr/include/glib-2.0 -I/usr/lib/glib-2.0/include -g -O2 -o attrib/gatttool attrib/gatttool.o attrib/att.o attrib/gatt.o attrib/gattrib.o btio/btio.o attrib/interactive.o attrib/utils.o src/log.o client/display.o  lib/.libs/libbluetooth-internal.a src/.libs/libshared-glib.a -lglib-2.0 -lintl -lreadline
+/bin/sh ./libtool  --tag=CC   --mode=link gcc    -I/usr/include/dbus-1.0 -I/usr/lib/dbus-1.0/include -I/usr/include/glib-2.0 -I/usr/lib/glib-2.0/include  -g -O2   -o tools/mgmt-tester tools/mgmt-tester.o emulator/hciemu.o emulator/btdev.o emulator/bthost.o emulator/smp.o lib/libbluetooth-internal.la src/libshared-glib.la -lglib-2.0 -lintl 
+libtool: link: gcc -I/usr/include/dbus-1.0 -I/usr/lib/dbus-1.0/include -I/usr/include/glib-2.0 -I/usr/lib/glib-2.0/include -g -O2 -o emulator/btvirt emulator/main.o emulator/serial.o emulator/server.o emulator/vhci.o emulator/btdev.o emulator/bthost.o emulator/smp.o emulator/phy.o emulator/amp.o emulator/le.o  lib/.libs/libbluetooth-internal.a src/.libs/libshared-mainloop.a
+libtool: link: gcc -I/usr/include/dbus-1.0 -I/usr/lib/dbus-1.0/include -I/usr/include/glib-2.0 -I/usr/lib/glib-2.0/include -g -O2 -o tools/bluemoon tools/bluemoon.o  src/.libs/libshared-mainloop.a
+libtool: link: gcc -I/usr/include/dbus-1.0 -I/usr/lib/dbus-1.0/include -I/usr/include/glib-2.0 -I/usr/lib/glib-2.0/include -g -O2 -o tools/cltest tools/cltest.o  lib/.libs/libbluetooth-internal.a src/.libs/libshared-mainloop.a
+libtool: link: gcc -I/usr/include/dbus-1.0 -I/usr/lib/dbus-1.0/include -I/usr/include/glib-2.0 -I/usr/lib/glib-2.0/include -g -O2 -o emulator/b1ee emulator/b1ee.o  src/.libs/libshared-mainloop.a
+/bin/sh ./libtool  --tag=CC   --mode=link gcc    -I/usr/include/dbus-1.0 -I/usr/lib/dbus-1.0/include -I/usr/include/glib-2.0 -I/usr/lib/glib-2.0/include  -g -O2   -o tools/gap-tester tools/gap-tester.o emulator/hciemu.o emulator/btdev.o emulator/bthost.o emulator/smp.o lib/libbluetooth-internal.la gdbus/libgdbus-internal.la src/libshared-glib.la -lglib-2.0 -lintl -ldbus-1 
+/bin/sh ./libtool  --tag=CC   --mode=link gcc    -I/usr/include/dbus-1.0 -I/usr/lib/dbus-1.0/include -I/usr/include/glib-2.0 -I/usr/lib/glib-2.0/include  -g -O2   -o tools/l2cap-tester tools/l2cap-tester.o emulator/hciemu.o emulator/btdev.o emulator/bthost.o emulator/smp.o lib/libbluetooth-internal.la src/libshared-glib.la -lglib-2.0 -lintl 
+/bin/sh ./libtool  --tag=CC   --mode=link gcc    -I/usr/include/dbus-1.0 -I/usr/lib/dbus-1.0/include -I/usr/include/glib-2.0 -I/usr/lib/glib-2.0/include  -g -O2   -o tools/sco-tester tools/sco-tester.o emulator/hciemu.o emulator/btdev.o emulator/bthost.o emulator/smp.o lib/libbluetooth-internal.la src/libshared-glib.la -lglib-2.0 -lintl 
+libtool: link: gcc -I/usr/include/dbus-1.0 -I/usr/lib/dbus-1.0/include -I/usr/include/glib-2.0 -I/usr/lib/glib-2.0/include -g -O2 -o monitor/btmon monitor/main.o monitor/display.o monitor/hcidump.o monitor/ellisys.o monitor/control.o monitor/packet.o monitor/vendor.o monitor/lmp.o monitor/crc.o monitor/ll.o monitor/l2cap.o monitor/sdp.o monitor/avctp.o monitor/avdtp.o monitor/a2dp.o monitor/rfcomm.o monitor/bnep.o monitor/uuid.o monitor/hwdb.o monitor/keys.o monitor/analyze.o monitor/intel.o monitor/broadcom.o  lib/.libs/libbluetooth-internal.a src/.libs/libshared-mainloop.a -ludev
+/bin/sh ./libtool  --tag=CC   --mode=link gcc    -I/usr/include/dbus-1.0 -I/usr/lib/dbus-1.0/include -I/usr/include/glib-2.0 -I/usr/lib/glib-2.0/include  -g -O2   -o tools/smp-tester tools/smp-tester.o emulator/hciemu.o emulator/btdev.o emulator/bthost.o emulator/smp.o lib/libbluetooth-internal.la src/libshared-glib.la -lglib-2.0 -lintl 
+/bin/sh ./libtool  --tag=CC   --mode=link gcc    -I/usr/include/dbus-1.0 -I/usr/lib/dbus-1.0/include -I/usr/include/glib-2.0 -I/usr/lib/glib-2.0/include  -g -O2   -o tools/hci-tester tools/hci-tester.o src/libshared-glib.la -lglib-2.0 -lintl 
+/bin/sh ./libtool  --tag=CC   --mode=link gcc    -I/usr/include/dbus-1.0 -I/usr/lib/dbus-1.0/include -I/usr/include/glib-2.0 -I/usr/lib/glib-2.0/include  -g -O2   -o tools/rfcomm-tester tools/rfcomm-tester.o emulator/hciemu.o emulator/btdev.o emulator/bthost.o emulator/smp.o lib/libbluetooth-internal.la src/libshared-glib.la -lglib-2.0 -lintl 
+/bin/sh ./libtool  --tag=CC   --mode=link gcc    -I/usr/include/dbus-1.0 -I/usr/lib/dbus-1.0/include -I/usr/include/glib-2.0 -I/usr/lib/glib-2.0/include  -g -O2   -o tools/bnep-tester tools/bnep-tester.o emulator/hciemu.o emulator/btdev.o emulator/bthost.o emulator/smp.o lib/libbluetooth-internal.la src/libshared-glib.la -lglib-2.0 -lintl 
+/bin/sh ./libtool  --tag=CC   --mode=link gcc    -I/usr/include/dbus-1.0 -I/usr/lib/dbus-1.0/include -I/usr/include/glib-2.0 -I/usr/lib/glib-2.0/include  -g -O2   -o tools/userchan-tester tools/userchan-tester.o emulator/hciemu.o emulator/btdev.o emulator/bthost.o emulator/smp.o lib/libbluetooth-internal.la src/libshared-glib.la -lglib-2.0 -lintl 
+/bin/sh ./libtool  --tag=CC   --mode=link gcc    -I/usr/include/dbus-1.0 -I/usr/lib/dbus-1.0/include -I/usr/include/glib-2.0 -I/usr/lib/glib-2.0/include  -g -O2   -o tools/btinfo tools/btinfo.o src/libshared-mainloop.la 
+/bin/sh ./libtool  --tag=CC   --mode=link gcc    -I/usr/include/dbus-1.0 -I/usr/lib/dbus-1.0/include -I/usr/include/glib-2.0 -I/usr/lib/glib-2.0/include  -g -O2   -o tools/btsnoop tools/btsnoop.o src/libshared-mainloop.la 
+/bin/sh ./libtool  --tag=CC   --mode=link gcc    -I/usr/include/dbus-1.0 -I/usr/lib/dbus-1.0/include -I/usr/include/glib-2.0 -I/usr/lib/glib-2.0/include  -g -O2   -o tools/btproxy tools/btproxy.o src/libshared-mainloop.la 
+libtool: link: gcc -I/usr/include/dbus-1.0 -I/usr/lib/dbus-1.0/include -I/usr/include/glib-2.0 -I/usr/lib/glib-2.0/include -DBLUETOOTH_PLUGIN_BUILTIN "-DPLUGINDIR=\"/opt/bluez/lib/bluetooth/plugins\"" -g -O2 -Wl,--export-dynamic -Wl,--version-script=./src/bluetooth.ver -o src/bluetoothd plugins/bluetoothd-hostname.o plugins/bluetoothd-wiimote.o plugins/bluetoothd-autopair.o plugins/bluetoothd-policy.o plugins/bluetoothd-neard.o profiles/sap/bluetoothd-main.o profiles/sap/bluetoothd-manager.o profiles/sap/bluetoothd-server.o profiles/sap/bluetoothd-sap-dummy.o profiles/audio/bluetoothd-source.o profiles/audio/bluetoothd-sink.o profiles/audio/bluetoothd-a2dp.o profiles/audio/bluetoothd-avdtp.o profiles/audio/bluetoothd-media.o profiles/audio/bluetoothd-transport.o profiles/audio/bluetoothd-control.o profiles/audio/bluetoothd-avctp.o profiles/audio/bluetoothd-avrcp.o profiles/audio/bluetoothd-player.o profiles/network/bluetoothd-manager.o profiles/network/bluetoothd-bnep.o profiles/network/bluetoothd-server.o profiles/network/bluetoothd-connection.o profiles/input/bluetoothd-manager.o profiles/input/bluetoothd-server.o profiles/input/bluetoothd-device.o profiles/input/bluetoothd-hog.o profiles/input/bluetoothd-hog-lib.o profiles/deviceinfo/bluetoothd-dis.o profiles/battery/bluetoothd-bas.o profiles/scanparam/bluetoothd-scpp.o profiles/input/bluetoothd-suspend-none.o profiles/health/bluetoothd-mcap.o profiles/health/bluetoothd-hdp_main.o profiles/health/bluetoothd-hdp_manager.o profiles/health/bluetoothd-hdp.o profiles/health/bluetoothd-hdp_util.o profiles/gap/bluetoothd-gas.o profiles/scanparam/bluetoothd-scan.o profiles/deviceinfo/bluetoothd-deviceinfo.o attrib/bluetoothd-att.o attrib/bluetoothd-gatt.o attrib/bluetoothd-gattrib.o attrib/bluetoothd-gatt-service.o btio/bluetoothd-btio.o src/bluetoothd-main.o src/bluetoothd-log.o src/bluetoothd-backtrace.o src/bluetoothd-systemd.o src/bluetoothd-rfkill.o src/bluetoothd-sdpd-server.o src/bluetoothd-sdpd-request.o src/bluetoothd-sdpd-service.o src/bluetoothd-sdpd-database.o src/bluetoothd-attrib-server.o src/bluetoothd-gatt-database.o src/bluetoothd-sdp-xml.o src/bluetoothd-sdp-client.o src/bluetoothd-textfile.o src/bluetoothd-uuid-helper.o src/bluetoothd-plugin.o src/bluetoothd-storage.o src/bluetoothd-advertising.o src/bluetoothd-agent.o src/bluetoothd-error.o src/bluetoothd-adapter.o src/bluetoothd-profile.o src/bluetoothd-service.o src/bluetoothd-gatt-client.o src/bluetoothd-device.o src/bluetoothd-dbus-common.o src/bluetoothd-eir.o  lib/.libs/libbluetooth-internal.a gdbus/.libs/libgdbus-internal.a src/.libs/libshared-glib.a -lglib-2.0 -lintl -ldbus-1 -ldl -lrt
+libtool: link: gcc -I/usr/include/dbus-1.0 -I/usr/lib/dbus-1.0/include -I/usr/include/glib-2.0 -I/usr/lib/glib-2.0/include -g -O2 -o peripheral/btsensor peripheral/main.o peripheral/efivars.o peripheral/attach.o peripheral/log.o peripheral/gap.o peripheral/gatt.o  src/.libs/libshared-mainloop.a lib/.libs/libbluetooth-internal.a
+libtool: link: gcc -I/usr/include/dbus-1.0 -I/usr/lib/dbus-1.0/include -I/usr/include/glib-2.0 -I/usr/lib/glib-2.0/include -g -O2 -o tools/3dsp tools/3dsp.o  src/.libs/libshared-mainloop.a
+libtool: link: gcc -I/usr/include/dbus-1.0 -I/usr/lib/dbus-1.0/include -I/usr/include/glib-2.0 -I/usr/lib/glib-2.0/include -g -O2 -o emulator/hfp emulator/hfp.o  src/.libs/libshared-mainloop.a
+libtool: link: gcc -I/usr/include/dbus-1.0 -I/usr/lib/dbus-1.0/include -I/usr/include/glib-2.0 -I/usr/lib/glib-2.0/include -g -O2 -o tools/mgmt-tester tools/mgmt-tester.o emulator/hciemu.o emulator/btdev.o emulator/bthost.o emulator/smp.o  lib/.libs/libbluetooth-internal.a src/.libs/libshared-glib.a -lglib-2.0 -lintl
+libtool: link: gcc -I/usr/include/dbus-1.0 -I/usr/lib/dbus-1.0/include -I/usr/include/glib-2.0 -I/usr/lib/glib-2.0/include -g -O2 -o tools/hci-tester tools/hci-tester.o  src/.libs/libshared-glib.a -lglib-2.0 -lintl
+libtool: link: gcc -I/usr/include/dbus-1.0 -I/usr/lib/dbus-1.0/include -I/usr/include/glib-2.0 -I/usr/lib/glib-2.0/include -g -O2 -o tools/l2cap-tester tools/l2cap-tester.o emulator/hciemu.o emulator/btdev.o emulator/bthost.o emulator/smp.o  lib/.libs/libbluetooth-internal.a src/.libs/libshared-glib.a -lglib-2.0 -lintl
+libtool: link: gcc -I/usr/include/dbus-1.0 -I/usr/lib/dbus-1.0/include -I/usr/include/glib-2.0 -I/usr/lib/glib-2.0/include -g -O2 -o tools/sco-tester tools/sco-tester.o emulator/hciemu.o emulator/btdev.o emulator/bthost.o emulator/smp.o  lib/.libs/libbluetooth-internal.a src/.libs/libshared-glib.a -lglib-2.0 -lintl
+/bin/sh ./libtool  --tag=CC   --mode=link gcc    -I/usr/include/dbus-1.0 -I/usr/lib/dbus-1.0/include -I/usr/include/glib-2.0 -I/usr/lib/glib-2.0/include  -g -O2   -o client/bluetoothctl client/main.o client/display.o client/agent.o client/advertising.o client/gatt.o monitor/uuid.o gdbus/libgdbus-internal.la -lglib-2.0 -lintl -ldbus-1 -lreadline 
+libtool: link: gcc -I/usr/include/dbus-1.0 -I/usr/lib/dbus-1.0/include -I/usr/include/glib-2.0 -I/usr/lib/glib-2.0/include -g -O2 -o tools/smp-tester tools/smp-tester.o emulator/hciemu.o emulator/btdev.o emulator/bthost.o emulator/smp.o  lib/.libs/libbluetooth-internal.a src/.libs/libshared-glib.a -lglib-2.0 -lintl
+libtool: link: gcc -I/usr/include/dbus-1.0 -I/usr/lib/dbus-1.0/include -I/usr/include/glib-2.0 -I/usr/lib/glib-2.0/include -g -O2 -o tools/btinfo tools/btinfo.o  src/.libs/libshared-mainloop.a
+libtool: link: gcc -I/usr/include/dbus-1.0 -I/usr/lib/dbus-1.0/include -I/usr/include/glib-2.0 -I/usr/lib/glib-2.0/include -g -O2 -o tools/gap-tester tools/gap-tester.o emulator/hciemu.o emulator/btdev.o emulator/bthost.o emulator/smp.o  lib/.libs/libbluetooth-internal.a gdbus/.libs/libgdbus-internal.a src/.libs/libshared-glib.a -lglib-2.0 -lintl -ldbus-1
+libtool: link: gcc -I/usr/include/dbus-1.0 -I/usr/lib/dbus-1.0/include -I/usr/include/glib-2.0 -I/usr/lib/glib-2.0/include -g -O2 -o tools/btsnoop tools/btsnoop.o  src/.libs/libshared-mainloop.a
+libtool: link: gcc -I/usr/include/dbus-1.0 -I/usr/lib/dbus-1.0/include -I/usr/include/glib-2.0 -I/usr/lib/glib-2.0/include -g -O2 -o tools/rfcomm-tester tools/rfcomm-tester.o emulator/hciemu.o emulator/btdev.o emulator/bthost.o emulator/smp.o  lib/.libs/libbluetooth-internal.a src/.libs/libshared-glib.a -lglib-2.0 -lintl
+libtool: link: gcc -I/usr/include/dbus-1.0 -I/usr/lib/dbus-1.0/include -I/usr/include/glib-2.0 -I/usr/lib/glib-2.0/include -g -O2 -o tools/btproxy tools/btproxy.o  src/.libs/libshared-mainloop.a
+libtool: link: gcc -I/usr/include/dbus-1.0 -I/usr/lib/dbus-1.0/include -I/usr/include/glib-2.0 -I/usr/lib/glib-2.0/include -g -O2 -o tools/bnep-tester tools/bnep-tester.o emulator/hciemu.o emulator/btdev.o emulator/bthost.o emulator/smp.o  lib/.libs/libbluetooth-internal.a src/.libs/libshared-glib.a -lglib-2.0 -lintl
+libtool: link: gcc -I/usr/include/dbus-1.0 -I/usr/lib/dbus-1.0/include -I/usr/include/glib-2.0 -I/usr/lib/glib-2.0/include -g -O2 -o tools/userchan-tester tools/userchan-tester.o emulator/hciemu.o emulator/btdev.o emulator/bthost.o emulator/smp.o  lib/.libs/libbluetooth-internal.a src/.libs/libshared-glib.a -lglib-2.0 -lintl
+libtool: link: gcc -I/usr/include/dbus-1.0 -I/usr/lib/dbus-1.0/include -I/usr/include/glib-2.0 -I/usr/lib/glib-2.0/include -g -O2 -o client/bluetoothctl client/main.o client/display.o client/agent.o client/advertising.o client/gatt.o monitor/uuid.o  gdbus/.libs/libgdbus-internal.a -lglib-2.0 -lintl -ldbus-1 -lreadline
+/bin/sh ./libtool  --tag=CC   --mode=link gcc    -I/usr/include/dbus-1.0 -I/usr/lib/dbus-1.0/include -I/usr/include/glib-2.0 -I/usr/lib/glib-2.0/include  -g -O2   -o tools/btmgmt tools/btmgmt.o src/uuid-helper.o client/display.o lib/libbluetooth-internal.la src/libshared-mainloop.la -lreadline 
+libtool: link: gcc -I/usr/include/dbus-1.0 -I/usr/lib/dbus-1.0/include -I/usr/include/glib-2.0 -I/usr/lib/glib-2.0/include -g -O2 -o tools/btmgmt tools/btmgmt.o src/uuid-helper.o client/display.o  lib/.libs/libbluetooth-internal.a src/.libs/libshared-mainloop.a -lreadline
+
+=== Installing ===
+/usr/bin/make --no-print-directory install-am
+ ./install-sh -c -d '/build/install/opt/bluez/bin'
+  /bin/sh ./libtool   --mode=install /usr/bin/install -c client/bluetoothctl monitor/btmon tools/hciattach tools/hciconfig tools/hcitool tools/hcidump tools/rfcomm tools/rctest tools/l2test tools/l2ping tools/sdptool tools/ciptool tools/bccmd tools/bluemoon tools/hex2hcd tools/mpris-proxy tools/btattach '/build/install/opt/bluez/bin'
+libtool: install: /usr/bin/install -c client/bluetoothctl /build/install/opt/bluez/bin/bluetoothctl
+libtool: install: /usr/bin/install -c monitor/btmon /build/install/opt/bluez/bin/btmon
+libtool: install: /usr/bin/install -c tools/hciattach /build/install/opt/bluez/bin/hciattach
+libtool: install: /usr/bin/install -c tools/hciconfig /build/install/opt/bluez/bin/hciconfig
+libtool: install: /usr/bin/install -c tools/hcitool /build/install/opt/bluez/bin/hcitool
+libtool: install: /usr/bin/install -c tools/hcidump /build/install/opt/bluez/bin/hcidump
+libtool: install: /usr/bin/install -c tools/rfcomm /build/install/opt/bluez/bin/rfcomm
+libtool: install: /usr/bin/install -c tools/rctest /build/install/opt/bluez/bin/rctest
+libtool: install: /usr/bin/install -c tools/l2test /build/install/opt/bluez/bin/l2test
+libtool: install: /usr/bin/install -c tools/l2ping /build/install/opt/bluez/bin/l2ping
+libtool: install: /usr/bin/install -c tools/sdptool /build/install/opt/bluez/bin/sdptool
+libtool: install: /usr/bin/install -c tools/ciptool /build/install/opt/bluez/bin/ciptool
+libtool: install: /usr/bin/install -c tools/bccmd /build/install/opt/bluez/bin/bccmd
+libtool: install: /usr/bin/install -c tools/bluemoon /build/install/opt/bluez/bin/bluemoon
+libtool: install: /usr/bin/install -c tools/hex2hcd /build/install/opt/bluez/bin/hex2hcd
+libtool: install: /usr/bin/install -c tools/mpris-proxy /build/install/opt/bluez/bin/mpris-proxy
+libtool: install: /usr/bin/install -c tools/btattach /build/install/opt/bluez/bin/btattach
+ ./install-sh -c -d '/build/install/opt/bluez/libexec/bluetooth'
+  /bin/sh ./libtool   --mode=install /usr/bin/install -c src/bluetoothd obexd/src/obexd '/build/install/opt/bluez/libexec/bluetooth'
+libtool: install: /usr/bin/install -c src/bluetoothd /build/install/opt/bluez/libexec/bluetooth/bluetoothd
+libtool: install: /usr/bin/install -c obexd/src/obexd /build/install/opt/bluez/libexec/bluetooth/obexd
+ ./install-sh -c -d '/build/install/etc/dbus-1/system.d'
+ /usr/bin/install -c -m 644 src/bluetooth.conf '/build/install/etc/dbus-1/system.d'
+ ./install-sh -c -d '/build/install/opt/bluez/share/man/man1'
+ /usr/bin/install -c -m 644 tools/hciattach.1 tools/hciconfig.1 tools/hcitool.1 tools/hcidump.1 tools/rfcomm.1 tools/rctest.1 tools/l2ping.1 tools/sdptool.1 tools/ciptool.1 tools/bccmd.1 tools/hid2hci.1 tools/btattach.1 '/build/install/opt/bluez/share/man/man1'
+ ./install-sh -c -d '/build/install/opt/bluez/share/man/man8'
+ /usr/bin/install -c -m 644 src/bluetoothd.8 '/build/install/opt/bluez/share/man/man8'
+ ./install-sh -c -d '/build/install/lib/udev/rules.d'
+ /usr/bin/install -c -m 644 tools/97-hid2hci.rules '/build/install/lib/udev/rules.d'
+ ./install-sh -c -d '/build/install/lib/udev'
+  /bin/sh ./libtool   --mode=install /usr/bin/install -c tools/hid2hci '/build/install/lib/udev'
+libtool: install: /usr/bin/install -c tools/hid2hci /build/install/lib/udev/hid2hci
+
+=== Built executables ===
+/build/install/opt/bluez/bin/bluetoothctl: ELF 32-bit LSB pie executable, ARM, EABI5 version 1 (SYSV), dynamically linked, interpreter /lib/ld-musl-armhf.so.1, with debug_info, not stripped
+/build/install/opt/bluez/bin/btmon: ELF 32-bit LSB pie executable, ARM, EABI5 version 1 (SYSV), dynamically linked, interpreter /lib/ld-musl-armhf.so.1, with debug_info, not stripped
+/build/install/opt/bluez/bin/hciattach: ELF 32-bit LSB pie executable, ARM, EABI5 version 1 (SYSV), dynamically linked, interpreter /lib/ld-musl-armhf.so.1, with debug_info, not stripped
+/build/install/opt/bluez/bin/hciconfig: ELF 32-bit LSB pie executable, ARM, EABI5 version 1 (SYSV), dynamically linked, interpreter /lib/ld-musl-armhf.so.1, with debug_info, not stripped
+/build/install/opt/bluez/bin/hcitool: ELF 32-bit LSB pie executable, ARM, EABI5 version 1 (SYSV), dynamically linked, interpreter /lib/ld-musl-armhf.so.1, with debug_info, not stripped
+/build/install/opt/bluez/bin/hcidump: ELF 32-bit LSB pie executable, ARM, EABI5 version 1 (SYSV), dynamically linked, interpreter /lib/ld-musl-armhf.so.1, with debug_info, not stripped
+/build/install/opt/bluez/bin/rfcomm: ELF 32-bit LSB pie executable, ARM, EABI5 version 1 (SYSV), dynamically linked, interpreter /lib/ld-musl-armhf.so.1, with debug_info, not stripped
+/build/install/opt/bluez/bin/rctest: ELF 32-bit LSB pie executable, ARM, EABI5 version 1 (SYSV), dynamically linked, interpreter /lib/ld-musl-armhf.so.1, with debug_info, not stripped
+/build/install/opt/bluez/bin/l2test: ELF 32-bit LSB pie executable, ARM, EABI5 version 1 (SYSV), dynamically linked, interpreter /lib/ld-musl-armhf.so.1, with debug_info, not stripped
+/build/install/opt/bluez/bin/l2ping: ELF 32-bit LSB pie executable, ARM, EABI5 version 1 (SYSV), dynamically linked, interpreter /lib/ld-musl-armhf.so.1, with debug_info, not stripped
+/build/install/opt/bluez/bin/sdptool: ELF 32-bit LSB pie executable, ARM, EABI5 version 1 (SYSV), dynamically linked, interpreter /lib/ld-musl-armhf.so.1, with debug_info, not stripped
+/build/install/opt/bluez/bin/ciptool: ELF 32-bit LSB pie executable, ARM, EABI5 version 1 (SYSV), dynamically linked, interpreter /lib/ld-musl-armhf.so.1, with debug_info, not stripped
+/build/install/opt/bluez/bin/bccmd: ELF 32-bit LSB pie executable, ARM, EABI5 version 1 (SYSV), dynamically linked, interpreter /lib/ld-musl-armhf.so.1, with debug_info, not stripped
+/build/install/opt/bluez/bin/bluemoon: ELF 32-bit LSB pie executable, ARM, EABI5 version 1 (SYSV), dynamically linked, interpreter /lib/ld-musl-armhf.so.1, with debug_info, not stripped
+/build/install/opt/bluez/bin/hex2hcd: ELF 32-bit LSB pie executable, ARM, EABI5 version 1 (SYSV), dynamically linked, interpreter /lib/ld-musl-armhf.so.1, with debug_info, not stripped
+/build/install/opt/bluez/bin/mpris-proxy: ELF 32-bit LSB pie executable, ARM, EABI5 version 1 (SYSV), dynamically linked, interpreter /lib/ld-musl-armhf.so.1, with debug_info, not stripped
+/build/install/opt/bluez/bin/btattach: ELF 32-bit LSB pie executable, ARM, EABI5 version 1 (SYSV), dynamically linked, interpreter /lib/ld-musl-armhf.so.1, with debug_info, not stripped
+/build/install/opt/bluez/libexec/bluetooth/bluetoothd: ELF 32-bit LSB pie executable, ARM, EABI5 version 1 (SYSV), dynamically linked, interpreter /lib/ld-musl-armhf.so.1, with debug_info, not stripped
+/build/install/opt/bluez/libexec/bluetooth/obexd: ELF 32-bit LSB pie executable, ARM, EABI5 version 1 (SYSV), dynamically linked, interpreter /lib/ld-musl-armhf.so.1, with debug_info, not stripped
+
+Build complete! Checking results...
+install/opt/bluez/bin/:
+total 7.3M
+-rwxr-xr-x 1 lzampier lzampier 417K Dec  1 11:46 bccmd
+-rwxr-xr-x 1 lzampier lzampier 107K Dec  1 11:46 bluemoon
+-rwxr-xr-x 1 lzampier lzampier 386K Dec  1 11:46 bluetoothctl
+-rwxr-xr-x 1 lzampier lzampier  86K Dec  1 11:46 btattach
+-rwxr-xr-x 1 lzampier lzampier 1.7M Dec  1 11:46 btmon
+-rwxr-xr-x 1 lzampier lzampier 377K Dec  1 11:46 ciptool
+-rwxr-xr-x 1 lzampier lzampier 349K Dec  1 11:46 hciattach
+-rwxr-xr-x 1 lzampier lzampier 363K Dec  1 11:46 hciconfig
+-rwxr-xr-x 1 lzampier lzampier 1.4M Dec  1 11:46 hcidump
+-rwxr-xr-x 1 lzampier lzampier 324K Dec  1 11:46 hcitool
+-rwxr-xr-x 1 lzampier lzampier  29K Dec  1 11:46 hex2hcd
+-rwxr-xr-x 1 lzampier lzampier 212K Dec  1 11:46 l2ping
+-rwxr-xr-x 1 lzampier lzampier 256K Dec  1 11:46 l2test
+-rwxr-xr-x 1 lzampier lzampier 279K Dec  1 11:46 mpris-proxy
+-rwxr-xr-x 1 lzampier lzampier 386K Dec  1 11:46 rctest
+-rwxr-xr-x 1 lzampier lzampier 234K Dec  1 11:46 rfcomm
+-rwxr-xr-x 1 lzampier lzampier 548K Dec  1 11:46 sdptool
+
+install/opt/bluez/libexec/:
+total 0
+drwxr-xr-x 1 lzampier lzampier 30 Dec  1 11:46 bluetooth
