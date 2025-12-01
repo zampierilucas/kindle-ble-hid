@@ -47,33 +47,19 @@ See `bumble_ble_hid/README.md` for technical details.
 
 ```
 kindle/
-├── README.md                              - This file
-├── QUICK_START.md                         - User guide
+├── README.md                  - This file
+├── QUICK_START.md            - User guide
+├── BLE_SMP_LIMITATION.md     - Technical explanation
+├── kindle_system_info.md     - Hardware reference
 │
-├── bumble_ble_hid/                        - BLE HID implementation
-│   ├── README.md                          - Technical details
-│   ├── USAGE_EXAMPLES.md                  - Usage examples
-│   ├── DAEMON_NOTES.md                    - Daemon information
-│   ├── kindle_ble_hid.py                  - Main implementation
-│   ├── ble_hid_daemon.py                  - Persistent daemon
-│   ├── kindle_ble_hid.sh                  - Helper script
-│   └── ble-hid-init.sh                    - Init script
-│
-├── old/                                   - Failed experiments (archived)
-│   ├── README.md                          - Failure analysis summary
-│   ├── bluez/                             - BlueZ implementation (Classic BT only)
-│   ├── src/                               - Failed experiment sources
-│   └── docs/                              - Failed experiment documentation
-│
-└── Documentation
-    ├── BLE_SMP_LIMITATION.md              - Kernel SMP bug analysis
-    ├── BLE_SMP_RESEARCH.md                - Solutions research
-    ├── BUMBLE_BLE_HID_FIXES.md            - Bumble API compatibility fixes
-    ├── BUMBLE_IMPLEMENTATION_SUMMARY.md   - Implementation details
-    ├── BLUETOOTH_ORGANIZATION.md          - Device file organization
-    ├── DAEMON_INSTALLATION.md             - Daemon setup
-    ├── kindle_system_info.md              - Hardware and system info
-    └── kindle_kernel_config.txt           - Full kernel config
+└── bumble_ble_hid/           - BLE HID implementation
+    ├── README.md             - Technical details
+    ├── INSTALLATION.md       - Setup guide
+    ├── USAGE_EXAMPLES.md     - Usage examples
+    ├── DEBUG_UHID.md         - Debugging guide
+    ├── kindle_ble_hid.py     - Main implementation
+    ├── ble_hid_daemon.py     - Persistent daemon
+    └── ble-hid-init.sh       - Init script
 ```
 
 ## Technical Details
@@ -102,32 +88,6 @@ The kernel's virtual HCI implementation doesn't properly initialize SMP context 
 ### Single BLE HID Device
 The current daemon implementation supports only one BLE HID device at a time. See `bumble_ble_hid/DAEMON_NOTES.md` for details.
 
-## Development History
+## Installation
 
-This project went through several approaches before arriving at the working Google Bumble solution:
-
-1. **BLE via BlueZ/VHCI** - Failed (kernel SMP bug)
-   - Kernel doesn't properly initialize SMP for virtual HCI devices
-   - Prevents BLE HID pairing that requires encryption
-   - Archived in `old/bluez/`
-
-2. **PTY + hci_uart approach** - Failed (hardware initialization)
-   - Hardware initialization requirements cannot be met with PTY
-   - Archived in `old/src/` and `old/docs/`
-
-3. **Google Bumble userspace stack** - Working (final solution)
-   - Implements full BLE stack including SMP in userspace
-   - Bypasses kernel Bluetooth code entirely
-   - Successfully pairs and operates BLE HID devices
-
-See `old/README.md` for detailed failure analysis. Complete experimental history preserved in git under tag `pre-cleanup`.
-
-## Device Connection
-
-```bash
-ssh root@192.168.0.65
-```
-
-## Author
-
-Lucas Zampieri <lzampier@redhat.com>
+See `bumble_ble_hid/INSTALLATION.md` for complete setup instructions on your Kindle device.

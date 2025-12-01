@@ -163,9 +163,13 @@ class UHIDDevice:
 
         try:
             bytes_written = os.write(self.fd, event)
-            print(color(f"    UHID: Sent {bytes_written} bytes to kernel", 'blue'))
+            print(color(f"    UHID: Sent {bytes_written} bytes (fd={self.fd}, expected={len(event)})", 'blue'))
+            if bytes_written != len(event):
+                logging.error(f"Partial write! Expected {len(event)}, wrote {bytes_written}")
         except OSError as e:
             logging.error(f"Failed to send input report: {e}")
+        except Exception as e:
+            logging.error(f"Unexpected error in send_input: {e}")
 
     def destroy(self):
         """Destroy the UHID device"""
@@ -400,6 +404,7 @@ class BLEHIDHost:
                     value = await self.peer.read_value(char)
                     self.report_map = bytes(value)
                     print(color(f"    Report Map: {len(self.report_map)} bytes", 'green'))
+                    print(color(f"    Report Map (hex): {self.report_map.hex()}", 'cyan'))
                 except Exception as e:
                     print(color(f"    Failed to read report map: {e}", 'red'))
 

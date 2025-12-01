@@ -53,7 +53,7 @@ MediaTek MT8512 CONSYS
 
 **WORKING** - Implementation has been fixed and is compatible with Bumble 0.0.200.
 
-See `BUMBLE_BLE_HID_FIXES.md` in the parent directory for details on API fixes.
+See `API_FIXES.md` for details on Bumble 0.0.200 API compatibility fixes.
 
 ## Requirements
 
