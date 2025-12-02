@@ -92,8 +92,8 @@ class BLEHIDDaemon:
             logger.info(f"Monitoring {len(fds)} input devices for activity")
 
             while self.running:
-                # Use select with timeout to check for input events
-                readable, _, _ = select.select(fds, [], [], 1.0)
+                # Use select with timeout to check for input events (5s is sufficient)
+                readable, _, _ = select.select(fds, [], [], 5.0)
 
                 if readable:
                     # Activity detected, update timestamp

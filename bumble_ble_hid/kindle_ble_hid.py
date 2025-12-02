@@ -15,10 +15,12 @@ Date: December 2025
 
 import asyncio
 import argparse
+import json
 import logging
 import os
 import struct
 import sys
+import time
 
 from bumble.device import Device, Peer
 from bumble.hci import Address
@@ -62,6 +64,9 @@ HID_REPORT_TYPE_FEATURE = 3
 # UHID Interface for Linux Input Injection
 # -----------------------------------------------------------------------------
 UHID_DEVICE = '/dev/uhid'
+
+# GATT cache directory
+GATT_CACHE_DIR = '/mnt/us/bumble_ble_hid/cache'
 
 # UHID event types
 UHID_CREATE2 = 11
@@ -154,8 +159,8 @@ class UHIDDevice:
 
         while self.running:
             try:
-                # Use asyncio to avoid blocking
-                await asyncio.sleep(0.01)
+                # Use asyncio to avoid blocking (10Hz polling is sufficient for HID)
+                await asyncio.sleep(0.1)
 
                 # Try to read event from kernel
                 try:
@@ -287,6 +292,7 @@ class BLEHIDHost:
         self.report_map = None
         self.last_button_state = {}  # report_id -> button_state (to detect changes)
         self.last_press_time = 0  # Global timestamp for debouncing (across all report IDs)
+        self.current_device_address = None  # Track connected device for cache
 
     async def start(self):
         """Initialize the Bumble device"""
@@ -385,6 +391,9 @@ class BLEHIDHost:
         """Connect to a BLE device"""
         print(color(f">>> Connecting to {address}...", 'blue'))
 
+        # Track device address for cache
+        self.current_device_address = address
+
         target = Address(address)
         try:
             self.connection = await asyncio.wait_for(
@@ -431,13 +440,61 @@ class BLEHIDHost:
             print(color(f">>> Pairing error: {e}", 'red'))
             return False
 
+    def _get_cache_path(self, address: str):
+        """Get cache file path for device address"""
+        safe_addr = address.replace(':', '_')
+        return os.path.join(GATT_CACHE_DIR, f"{safe_addr}.json")
+
+    def _load_cache(self, address: str):
+        """Load cached GATT attributes for device"""
+        cache_path = self._get_cache_path(address)
+        if not os.path.exists(cache_path):
+            return None
+
+        try:
+            with open(cache_path, 'r') as f:
+                cache = json.load(f)
+                print(color(f">>> Loaded GATT cache for {address}", 'green'))
+                return cache
+        except Exception as e:
+            logging.warning(f"Failed to load cache for {address}: {e}")
+            return None
+
+    def _save_cache(self, address: str, cache_data: dict):
+        """Save GATT attributes to cache"""
+        try:
+            os.makedirs(GATT_CACHE_DIR, exist_ok=True)
+            cache_path = self._get_cache_path(address)
+            with open(cache_path, 'w') as f:
+                json.dump(cache_data, f, indent=2)
+            print(color(f">>> Saved GATT cache for {address}", 'green'))
+        except Exception as e:
+            logging.warning(f"Failed to save cache for {address}: {e}")
+
     async def discover_hid_service(self):
         """Discover and subscribe to HID service characteristics"""
         if not self.peer:
             print(color(">>> Not connected!", 'red'))
             return False
 
-        print(color(">>> Discovering GATT services...", 'blue'))
+        # Try to load from cache first
+        if self.current_device_address:
+            cache = self._load_cache(self.current_device_address)
+            if cache:
+                try:
+                    # Restore report map from cache
+                    self.report_map = bytes.fromhex(cache['report_map'])
+                    print(color(f">>> Using cached report map ({len(self.report_map)} bytes)", 'green'))
+
+                    # Note: We still need to discover services to get characteristic handles
+                    # but we skip reading the report map
+                    print(color(">>> Discovering GATT services (using cached report map)...", 'blue'))
+                except Exception as e:
+                    logging.warning(f"Cache corrupt, re-discovering: {e}")
+                    cache = None
+
+        if not cache:
+            print(color(">>> Discovering GATT services...", 'blue'))
 
         # Discover all services
         await self.peer.discover_services()
@@ -459,14 +516,22 @@ class BLEHIDHost:
             print(color(f"    Characteristic: {char.uuid}", 'cyan'))
 
             if char.uuid == GATT_HID_REPORT_MAP_CHARACTERISTIC:
-                # Read report map (HID descriptor)
-                try:
-                    value = await self.peer.read_value(char)
-                    self.report_map = bytes(value)
-                    print(color(f"    Report Map: {len(self.report_map)} bytes", 'green'))
-                    print(color(f"    Report Map (hex): {self.report_map.hex()}", 'cyan'))
-                except Exception as e:
-                    print(color(f"    Failed to read report map: {e}", 'red'))
+                # Read report map (HID descriptor) only if not cached
+                if not self.report_map:
+                    try:
+                        value = await self.peer.read_value(char)
+                        self.report_map = bytes(value)
+                        print(color(f"    Report Map: {len(self.report_map)} bytes", 'green'))
+                        print(color(f"    Report Map (hex): {self.report_map.hex()}", 'cyan'))
+
+                        # Save to cache
+                        if self.current_device_address:
+                            cache_data = {'report_map': self.report_map.hex()}
+                            self._save_cache(self.current_device_address, cache_data)
+                    except Exception as e:
+                        print(color(f"    Failed to read report map: {e}", 'red'))
+                else:
+                    print(color(f"    Using cached Report Map: {len(self.report_map)} bytes", 'cyan'))
 
             elif char.uuid == GATT_HID_REPORT_CHARACTERISTIC:
                 # Discover descriptors to find report reference (pass characteristic as named argument)
@@ -557,8 +622,6 @@ class BLEHIDHost:
 
     def _on_hid_report(self, value):
         """Handle incoming HID input reports"""
-        import time
-
         report_data = bytes(value)
         print(color(f">>> HID Report: {report_data.hex()}", 'magenta'))
 
