@@ -502,6 +502,56 @@ class BLEHIDHost:
             except Exception as e:
                 print(color(f">>> Failed to subscribe to report {report_id}: {e}", 'yellow'))
 
+    def _map_button_combination(self, button_state, x_movement=0, y_movement=0):
+        """
+        Map device's button combinations to clean individual buttons.
+
+        The clicker is weird - it sends mouse movement data with button presses,
+        and the movement patterns help distinguish which button was pressed.
+
+        Returns: (mapped_button_code, button_name) or (None, None) if unknown
+        """
+        # Convert signed bytes to signed integers
+        x_signed = x_movement if x_movement < 128 else x_movement - 256
+        y_signed = y_movement if y_movement < 128 else y_movement - 256
+
+        # 0x96 pattern - this is LEFT
+        if button_state == 0x96:
+            return (0x01, "Button 1 (Left)")
+
+        # 0x2c pattern - this is CENTER/SELECT button
+        if button_state == 0x2c:
+            return (0x10, "Button 5 (Center)")
+
+        # 0xd5 pattern - this is ENTER/CONFIRM button
+        if button_state == 0xd5:
+            return (0x20, "Button 6 (Enter)")
+
+        # For 0x68, we need to look at the exact movement pattern
+        if button_state == 0x68:
+            # Down: positive Y movement (0x20 = 32)
+            if y_signed > 0:
+                return (0x08, "Button 4 (Down)")
+
+            # For negative Y (up movement with button 0x68):
+            # - UP has x=0x00 (no X movement)
+            # - RIGHT has small positive x (like 0x01)
+            if x_movement == 0x00:
+                return (0x02, "Button 2 (Up)")
+            else:
+                return (0x04, "Button 3 (Right)")
+
+        # Right button sometimes sends 0xFA
+        if button_state == 0xFA:
+            return (0x04, "Button 3 (Right)")
+
+        # Fallback: send first set bit as button number
+        for i in range(8):
+            if button_state & (1 << i):
+                return (1 << i, f"Button (bit {i})")
+
+        return (None, None)
+
     def _on_hid_report(self, value):
         """Handle incoming HID input reports"""
         import time
@@ -516,29 +566,38 @@ class BLEHIDHost:
         if len(report_data) < 2:
             return
 
-        # Extract report ID and button state
+        # Extract report ID, button state, and movement
         report_id = report_data[0]
         button_state = report_data[1]
+        x_movement = report_data[2] if len(report_data) > 2 else 0
+        y_movement = report_data[3] if len(report_data) > 3 else 0
 
-        # Get previous button state
-        prev_state = self.last_button_state.get(report_id, 0)
-
-        # Detect newly pressed buttons (bits that changed from 0 to 1)
-        newly_pressed = button_state & ~prev_state
-
-        if newly_pressed:
-            # Debounce: ignore ANY button press within 300ms (global across all report IDs)
+        # Detect if any button is pressed (non-zero button state)
+        if button_state != 0:
+            # Debounce: ignore ANY button press within 500ms (global across all report IDs)
             current_time = time.time()
 
-            if current_time - self.last_press_time < 0.3:
+            if current_time - self.last_press_time < 0.5:
                 print(color(f"    Debounced (too soon)", 'blue'))
-                self.last_button_state[report_id] = button_state
                 return
 
+            # Map the button combination to a clean single button using movement direction
+            mapped_button, button_name = self._map_button_combination(button_state, x_movement, y_movement)
+
+            if mapped_button is None:
+                print(color(f"    Unknown button combination: 0x{button_state:02x}", 'yellow'))
+                return
+
+            print(color(f"    Detected: {button_name} (raw: 0x{button_state:02x}, x:{x_movement:02x}, y:{y_movement:02x})", 'cyan'))
+
+            # Create clean button report with mapped button
+            clean_data = bytearray(report_data)
+            clean_data[1] = mapped_button  # Replace with clean single button
+
             # Send the press event
-            translated_data = self._translate_report_id(report_data)
+            translated_data = self._translate_report_id(bytes(clean_data))
             self.uhid_device.send_input(translated_data)
-            print(color(f"    Button press: 0x{button_state:02x} (new: 0x{newly_pressed:02x})", 'green'))
+            print(color(f"    Sent clean button: 0x{mapped_button:02x}", 'green'))
 
             # Immediately synthesize a release event (all buttons off)
             release_data = bytearray(report_data)
@@ -549,9 +608,6 @@ class BLEHIDHost:
 
             # Update global debounce timestamp
             self.last_press_time = current_time
-
-        # Update last state
-        self.last_button_state[report_id] = button_state
 
     def _translate_report_id(self, report_data):
         """
@@ -576,42 +632,45 @@ class BLEHIDHost:
         ID 5: translated from device's invalid ID 0
         ID 7: device sends this directly
         """
-        # Simple 8-button descriptor for Report ID 5 (translated from 0)
+        # Mouse-style button descriptor for Report ID 5 (translated from 0)
+        # Use mouse buttons which have better kernel support
         report_id_5 = bytes([
             0x85, 0x05,        # Report ID (5)
             0x05, 0x09,        # Usage Page (Button)
             0x19, 0x01,        # Usage Minimum (Button 1)
-            0x29, 0x08,        # Usage Maximum (Button 8)
+            0x29, 0x10,        # Usage Maximum (Button 16) - wider range
             0x15, 0x00,        # Logical Minimum (0)
             0x25, 0x01,        # Logical Maximum (1)
+            0x95, 0x10,        # Report Count (16 bits)
             0x75, 0x01,        # Report Size (1 bit)
-            0x95, 0x08,        # Report Count (8 buttons)
             0x81, 0x02,        # Input (Data, Variable, Absolute)
-            0x75, 0x08,        # Report Size (8 bits)
-            0x95, 0x04,        # Report Count (4 bytes padding)
+            # Padding for rest of report (3 bytes remaining)
+            0x95, 0x18,        # Report Count (24 bits = 3 bytes)
+            0x75, 0x01,        # Report Size (1 bit)
             0x81, 0x01,        # Input (Constant)
         ])
 
-        # Simple 8-button descriptor for Report ID 7
+        # Same for Report ID 7
         report_id_7 = bytes([
             0x85, 0x07,        # Report ID (7)
             0x05, 0x09,        # Usage Page (Button)
             0x19, 0x01,        # Usage Minimum (Button 1)
-            0x29, 0x08,        # Usage Maximum (Button 8)
+            0x29, 0x10,        # Usage Maximum (Button 16)
             0x15, 0x00,        # Logical Minimum (0)
             0x25, 0x01,        # Logical Maximum (1)
+            0x95, 0x10,        # Report Count (16 bits)
             0x75, 0x01,        # Report Size (1 bit)
-            0x95, 0x08,        # Report Count (8 buttons)
             0x81, 0x02,        # Input (Data, Variable, Absolute)
-            0x75, 0x08,        # Report Size (8 bits)
-            0x95, 0x04,        # Report Count (4 bytes padding)
+            # Padding
+            0x95, 0x18,        # Report Count (24 bits)
+            0x75, 0x01,        # Report Size (1 bit)
             0x81, 0x01,        # Input (Constant)
         ])
 
         # Wrap in application collection
         patched = bytes([
             0x05, 0x01,        # Usage Page (Generic Desktop)
-            0x09, 0x05,        # Usage (Game Pad)
+            0x09, 0x02,        # Usage (Mouse) - better button support
             0xA1, 0x01,        # Collection (Application)
         ])
         patched += report_id_5
