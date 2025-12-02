@@ -1,6 +1,6 @@
 # Kindle BLE HID Support
 
-Connect BLE keyboards, mice, and game controllers to your Kindle MT8110 Bellatrix using Google Bumble.
+Connect BLE keyboards, mice, and game controllers to your Kindle using Google Bumble.
 
 ## Quick Start
 
@@ -15,9 +15,7 @@ ssh kindle '/etc/init.d/ble-hid status'
 ssh kindle 'tail -f /var/log/ble_hid_daemon.log'
 ```
 
-**Note:** The `kindle` SSH host is already configured in `~/.ssh/config` and should be used instead of the IP address directly.
-
-See `QUICK_START.md` for detailed usage and troubleshooting.
+See `QUICK_START.md` for detailed usage.
 
 ## How It Works
 
@@ -25,9 +23,7 @@ See `QUICK_START.md` for detailed usage and troubleshooting.
 MediaTek MT8512 → /dev/stpbt → Bumble (Python) → /dev/uhid → Linux Input
 ```
 
-**Why Google Bumble?**
-
-The Kindle's kernel has a bug preventing BLE HID pairing through the standard Linux Bluetooth stack. Bumble implements the entire Bluetooth stack (including security/pairing) in userspace Python, bypassing this kernel limitation entirely.
+The Kindle's kernel has a bug preventing BLE HID pairing through the standard Linux Bluetooth stack. Bumble implements the entire Bluetooth stack in Python, bypassing this limitation.
 
 See `BLE_SMP_LIMITATION.md` for technical details.
 
@@ -35,7 +31,7 @@ See `BLE_SMP_LIMITATION.md` for technical details.
 
 - Python 3.8 at `/mnt/us/python3.8-kindle/`
 - Google Bumble 0.0.200
-- BLE HID daemon at `/mnt/us/bumble_ble_hid/`
+- BLE HID implementation in `bumble_ble_hid/`
 - Init script at `/etc/init.d/ble-hid`
 
 ## Hardware
@@ -45,29 +41,30 @@ See `BLE_SMP_LIMITATION.md` for technical details.
 - **Kernel:** Linux 4.9.77-lab126
 - **Bluetooth:** MediaTek CONSYS via `/dev/stpbt`
 
-## Limitations
+See `kindle_system_info.md` for complete system details.
 
-- **Single device**: Daemon supports one BLE HID device at a time
-- **Python runtime**: Requires Python 3.8 on device
+## Features
 
-See `bumble_ble_hid/DAEMON_NOTES.md` for details.
-
-## Installation
-
-See `bumble_ble_hid/INSTALLATION.md` for setup instructions.
+- Multiple BLE HID devices simultaneously
+- Auto-reconnection with activity-aware delays
+- Pure UHID pass-through mode
+- GATT characteristic caching for fast reconnection
 
 ## Project Structure
 
 ```
 kindle/
-├── README.md                  - This file
-├── QUICK_START.md            - User guide
-├── BLE_SMP_LIMITATION.md     - Technical explanation
-├── kindle_system_info.md     - Hardware reference
+├── README.md                   # This file
+├── QUICK_START.md              # User guide
+├── BLE_SMP_LIMITATION.md       # Technical background
+├── kindle_system_info.md       # Hardware reference
 │
-└── bumble_ble_hid/           - BLE HID implementation
-    ├── README.md             - Technical details
-    ├── INSTALLATION.md       - Setup guide
-    ├── USAGE_EXAMPLES.md     - Usage examples
-    └── DEBUG_UHID.md         - Debugging guide
+├── bumble_ble_hid/             # BLE HID implementation
+│   ├── README.md               # Implementation details
+│   ├── USAGE.md                # Usage guide
+│   ├── kindle_ble_hid.py       # Main implementation
+│   ├── ble_hid_daemon.py       # Persistent daemon
+│   └── docs/archive/           # Historical documentation
+│
+└── docs/archive/               # Historical documentation
 ```
