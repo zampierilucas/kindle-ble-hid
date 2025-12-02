@@ -127,8 +127,31 @@ class BLEHIDDaemon:
                 self.disconnect_event = asyncio.Event()
 
                 # Connect to device with shorter timeout
-                await self.host.connect(address, timeout=CONNECTION_TIMEOUT)
-                logger.info(f"Connected to {address}")
+                try:
+                    await self.host.connect(address, timeout=CONNECTION_TIMEOUT)
+                    logger.info(f"Connected to {address}")
+                except AssertionError as ae:
+                    # Handle Bumble's assertion error when own_address_type is None
+                    # This can happen after forcible device restart during reconnection
+                    if "own_address_type" in str(ae):
+                        logger.error(f"Bumble address type assertion error - controller state issue: {ae}")
+                        logger.info("Recreating Bumble host to reset state...")
+
+                        # Clean up current host
+                        try:
+                            await self.host.cleanup()
+                        except Exception:
+                            pass
+
+                        # Recreate host with fresh state
+                        from kindle_ble_hid import BLEHIDHost
+                        self.host = BLEHIDHost(TRANSPORT)
+                        await self.host.start()
+                        logger.info("Host recreated, will retry connection")
+                        raise TimeoutError("Host reset needed")
+                    else:
+                        # Re-raise other assertion errors
+                        raise
 
                 # Set up disconnection callback
                 def on_disconnect(reason):
