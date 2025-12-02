@@ -11,6 +11,8 @@ Format: One device address per line
 Author: Lucas Zampieri <lzampier@redhat.com>
 """
 
+__version__ = "1.3.0"  # Cached GATT characteristics to skip 10s discovery
+
 import asyncio
 import logging
 import os
@@ -119,15 +121,38 @@ class BLEHIDDaemon:
 
     async def connect_device(self, address):
         """Connect to a device with auto-reconnect based on Kindle activity"""
-        # Create a dedicated host instance for this device
-        if address not in self.hosts:
-            self.hosts[address] = BLEHIDHost(TRANSPORT)
-            await self.hosts[address].start()
-            logger.info(f"Created dedicated Bumble host for {address}")
-
-        host = self.hosts[address]
+        host = None
 
         while self.running:
+            # Create host if not already created
+            if address not in self.hosts or self.hosts[address] is None:
+                try:
+                    logger.debug(f"Creating BLEHIDHost for {address}")
+                    self.hosts[address] = BLEHIDHost(TRANSPORT)
+                    logger.debug(f"Starting BLEHIDHost for {address}")
+                    await self.hosts[address].start()
+                    logger.info(f"Created dedicated Bumble host for {address}")
+                except FileNotFoundError as e:
+                    logger.warning(f"Bluetooth device not ready: {e}")
+                    # Clean up partial host creation
+                    if address in self.hosts:
+                        del self.hosts[address]
+                    await asyncio.sleep(RECONNECT_DELAY_ACTIVE)
+                    continue
+                except Exception as e:
+                    logger.error(f"Failed to create Bumble host for {address}: {e}")
+                    # Clean up partial host creation
+                    if address in self.hosts:
+                        del self.hosts[address]
+                    await asyncio.sleep(RECONNECT_DELAY_ACTIVE)
+                    continue
+
+            host = self.hosts.get(address)
+            if host is None:
+                logger.error(f"Host for {address} is None after creation attempt, retrying...")
+                await asyncio.sleep(RECONNECT_DELAY_ACTIVE)
+                continue
+
             try:
                 logger.info(f"Connecting to {address}...")
 
@@ -152,7 +177,6 @@ class BLEHIDDaemon:
                             pass
 
                         # Recreate host with fresh state
-                        from kindle_ble_hid import BLEHIDHost
                         self.hosts[address] = BLEHIDHost(TRANSPORT)
                         await self.hosts[address].start()
                         host = self.hosts[address]
@@ -179,7 +203,8 @@ class BLEHIDDaemon:
                 logger.info(f"Discovering HID service on {address}...")
                 if await host.discover_hid_service():
                     logger.info(f"Creating UHID device for {address}...")
-                    uhid_created = await host.create_uhid_device(f"BLE HID {address}")
+                    # create_uhid_device will now use the actual device name from Generic Access Service
+                    uhid_created = await host.create_uhid_device()
                     if not uhid_created:
                         logger.error(f"Failed to create UHID device for {address}")
                         raise Exception("UHID device creation failed")
@@ -244,6 +269,7 @@ class BLEHIDDaemon:
             return
 
         try:
+            logger.info(f"BLE HID Daemon v{__version__}")
             logger.info(f"Starting daemon with {len(self.devices)} device(s) configured")
 
             # Start activity monitoring in background
@@ -258,7 +284,12 @@ class BLEHIDDaemon:
                 logger.info(f"Started connection task for {device_address}")
 
             # Wait for all connection tasks (they run indefinitely until stopped)
-            await asyncio.gather(*connection_tasks, return_exceptions=True)
+            results = await asyncio.gather(*connection_tasks, return_exceptions=True)
+
+            # Log any task failures
+            for i, result in enumerate(results):
+                if isinstance(result, Exception):
+                    logger.error(f"Connection task {i} failed: {result}")
 
         except KeyboardInterrupt:
             logger.info("Received interrupt signal")
@@ -291,14 +322,23 @@ class BLEHIDDaemon:
 
 async def main():
     """Entry point"""
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s %(levelname)s %(name)s: %(message)s',
-        handlers=[
-            logging.FileHandler('/var/log/ble_hid_daemon.log'),
-            logging.StreamHandler()
-        ]
-    )
+    # Configure logging with a specific formatter to avoid duplicates
+    root_logger = logging.getLogger()
+
+    # Remove all existing handlers
+    for handler in root_logger.handlers[:]:
+        root_logger.removeHandler(handler)
+
+    # Create file handler only (stdout/stderr are redirected to log file by init script)
+    file_handler = logging.FileHandler('/var/log/ble_hid_daemon.log')
+
+    # Set formatter
+    formatter = logging.Formatter('%(asctime)s %(levelname)s %(name)s: %(message)s')
+    file_handler.setFormatter(formatter)
+
+    # Add handler
+    root_logger.addHandler(file_handler)
+    root_logger.setLevel(logging.DEBUG)
 
     daemon = BLEHIDDaemon()
     shutdown_event = asyncio.Event()

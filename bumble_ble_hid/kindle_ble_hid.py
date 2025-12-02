@@ -13,6 +13,8 @@ Author: Lucas Zampieri <lzampier@redhat.com>
 Date: December 2025
 """
 
+__version__ = "1.3.0"  # Cached GATT characteristics to skip 10s discovery
+
 import asyncio
 import argparse
 import json
@@ -29,6 +31,7 @@ from bumble.gatt import (
     GATT_DEVICE_NAME_CHARACTERISTIC,
 )
 from bumble.pairing import PairingConfig, PairingDelegate
+from bumble.keys import JsonKeyStore
 from bumble.transport import open_transport
 from bumble.core import UUID, AdvertisingData
 from bumble.colors import color
@@ -67,6 +70,46 @@ UHID_DEVICE = '/dev/uhid'
 
 # GATT cache directory
 GATT_CACHE_DIR = '/mnt/us/bumble_ble_hid/cache'
+
+# Pairing keys storage
+PAIRING_KEYS_FILE = '/mnt/us/bumble_ble_hid/cache/pairing_keys.json'
+
+# Timestamp tracker for performance debugging
+_last_timestamp = None
+_original_print = print
+
+def _timestamped_print(*args, **kwargs):
+    """Print with automatic timestamp and delta"""
+    global _last_timestamp
+
+    # Check if first arg is a string (plain or from color()) containing ">>>"
+    if args and len(args) > 0:
+        first_arg = str(args[0])
+        if ">>>" in first_arg:
+            current = time.time()
+
+            if _last_timestamp is None:
+                delta_str = ""
+            else:
+                delta = current - _last_timestamp
+                delta_str = f" (+{delta:.3f}s)"
+
+            _last_timestamp = current
+            timestamp_str = time.strftime("%H:%M:%S", time.localtime(current))
+
+            # Modify the first argument to prepend timestamp
+            # Handle both plain strings and colored strings
+            if isinstance(args[0], str):
+                args = (f"[{timestamp_str}]{delta_str} {args[0]}",) + args[1:]
+            else:
+                # For colored strings, we need to preserve the color formatting
+                # Just print timestamp separately
+                _original_print(f"[{timestamp_str}]{delta_str}", end=" ")
+
+    _original_print(*args, **kwargs)
+
+# Override print for this module
+print = _timestamped_print
 
 # UHID event types
 UHID_CREATE2 = 11
@@ -293,11 +336,16 @@ class BLEHIDHost:
         self.last_button_state = {}  # report_id -> button_state (to detect changes)
         self.last_press_time = 0  # Global timestamp for debouncing (across all report IDs)
         self.current_device_address = None  # Track connected device for cache
+        self.device_name = None  # BLE device name from Generic Access Service
 
     async def start(self):
         """Initialize the Bumble device"""
+        print(color(f">>> Kindle BLE HID Host v{__version__}", 'cyan'))
         print(color(">>> Opening transport...", 'blue'))
         self.transport = await open_transport(self.transport_spec)
+
+        # Set up persistent key store for bonding
+        key_store = JsonKeyStore(namespace=None, filename=PAIRING_KEYS_FILE)
 
         if self.device_config:
             self.device = Device.from_config_file_with_hci(
@@ -312,6 +360,9 @@ class BLEHIDHost:
                 self.transport.source,
                 self.transport.sink
             )
+
+        # Attach key store to device
+        self.device.keystore = key_store
 
         # Configure pairing
         self.device.pairing_config_factory = lambda connection: PairingConfig(
@@ -426,11 +477,26 @@ class BLEHIDHost:
         print(color(f">>> Pairing failed: {reason}", 'red'))
 
     async def pair(self):
-        """Initiate pairing with the connected device"""
+        """Initiate pairing with the connected device (or use cached keys if available)"""
         if not self.connection:
             print(color(">>> Not connected!", 'red'))
             return False
 
+        # Check if we have bonding keys for this device
+        peer_address = self.connection.peer_address
+        if self.device.keystore:
+            try:
+                keys = await self.device.keystore.get(str(peer_address))
+                if keys:
+                    print(color(f">>> Using cached bonding keys for {peer_address}", 'cyan'))
+                    # Request encryption (will use cached keys)
+                    await self.connection.encrypt()
+                    print(color(">>> Bonding restored!", 'green'))
+                    return True
+            except Exception as e:
+                print(color(f">>> No cached keys found, will pair: {e}", 'yellow'))
+
+        # No cached keys, perform full pairing
         print(color(">>> Initiating pairing...", 'blue'))
         try:
             await self.connection.pair()
@@ -442,7 +508,7 @@ class BLEHIDHost:
 
     def _get_cache_path(self, address: str):
         """Get cache file path for device address"""
-        safe_addr = address.replace(':', '_')
+        safe_addr = address.replace(':', '_').replace('/', '_')
         return os.path.join(GATT_CACHE_DIR, f"{safe_addr}.json")
 
     def _load_cache(self, address: str):
@@ -454,6 +520,10 @@ class BLEHIDHost:
         try:
             with open(cache_path, 'r') as f:
                 cache = json.load(f)
+                # Validate cache structure
+                if 'report_map' not in cache:
+                    logging.warning(f"Invalid cache structure for {address}")
+                    return None
                 print(color(f">>> Loaded GATT cache for {address}", 'green'))
                 return cache
         except Exception as e:
@@ -478,6 +548,7 @@ class BLEHIDHost:
             return False
 
         # Try to load from cache first
+        cache = None
         if self.current_device_address:
             cache = self._load_cache(self.current_device_address)
             if cache:
@@ -486,9 +557,14 @@ class BLEHIDHost:
                     self.report_map = bytes.fromhex(cache['report_map'])
                     print(color(f">>> Using cached report map ({len(self.report_map)} bytes)", 'green'))
 
+                    # Restore device name from cache if available
+                    if 'device_name' in cache and cache['device_name']:
+                        self.device_name = cache['device_name']
+                        print(color(f">>> Using cached device name: {self.device_name}", 'green'))
+
                     # Note: We still need to discover services to get characteristic handles
                     # but we skip reading the report map
-                    print(color(">>> Discovering GATT services (using cached report map)...", 'blue'))
+                    print(color(">>> Discovering GATT services (using cached data)...", 'blue'))
                 except Exception as e:
                     logging.warning(f"Cache corrupt, re-discovering: {e}")
                     cache = None
@@ -498,6 +574,24 @@ class BLEHIDHost:
 
         # Discover all services
         await self.peer.discover_services()
+
+        # Read device name from Generic Access Service (skip if cached)
+        if not self.device_name:
+            try:
+                generic_access_services = [s for s in self.peer.services if s.uuid == GATT_GENERIC_ACCESS_SERVICE]
+                if generic_access_services:
+                    await self.peer.discover_characteristics(service=generic_access_services[0])
+                    device_name_chars = [c for c in generic_access_services[0].characteristics
+                                        if c.uuid == GATT_DEVICE_NAME_CHARACTERISTIC]
+                    if device_name_chars:
+                        name_value = await self.peer.read_value(device_name_chars[0])
+                        self.device_name = bytes(name_value).decode('utf-8', errors='replace')
+                        print(color(f">>> Device Name: {self.device_name}", 'cyan'))
+                        # Note: Cache will be saved after report_map is read
+            except Exception as e:
+                logging.warning(f"Could not read device name: {e}")
+        else:
+            print(color(f">>> Device Name: {self.device_name} (cached)", 'cyan'))
 
         # Find HID service
         hid_services = [s for s in self.peer.services if s.uuid == GATT_HID_SERVICE]
@@ -509,11 +603,85 @@ class BLEHIDHost:
         hid_service = hid_services[0]
         print(color(f">>> Found HID service: {hid_service.uuid}", 'green'))
 
-        # Discover characteristics (pass service as named argument)
-        await self.peer.discover_characteristics(service=hid_service)
+        # Check if we have cached characteristics
+        characteristics_cached = False
+        if cache and 'characteristics' in cache:
+            print(color(">>> Loading characteristics from cache...", 'cyan'))
+            try:
+                # Reconstruct characteristics from cache
+                from bumble.gatt import Characteristic
+                cached_chars = []
+                for char_data in cache['characteristics']:
+                    # Parse UUID - handle both short form ("2A4B") and full form
+                    uuid_str = char_data['uuid']
+
+                    # Convert short form to full UUID if needed
+                    if len(uuid_str) == 4:
+                        uuid_str = f"0000{uuid_str}-0000-1000-8000-00805F9B34FB"
+                    elif not uuid_str.startswith('0000'):
+                        # Invalid format, skip this cache
+                        raise ValueError(f"Invalid UUID format in cache: {uuid_str}")
+
+                    # Create a mock characteristic with the cached data
+                    # We need to provide get_descriptor method for Bumble's subscribe()
+                    def make_get_descriptor(handle):
+                        def get_descriptor(self, uuid):
+                            # Look for CCCD (Client Characteristic Configuration Descriptor)
+                            if uuid == GATT_CCCD:
+                                # Return a mock descriptor with the CCCD handle (handle + 1 by convention)
+                                return type('CachedDescriptor', (), {
+                                    'type': uuid,
+                                    'handle': handle + 1
+                                })()
+                            return None
+                        return get_descriptor
+
+                    char = type('CachedCharacteristic', (), {
+                        'uuid': UUID(uuid_str),
+                        'handle': char_data['handle'],
+                        'properties': char_data.get('properties', 0),
+                        'descriptors': [],
+                        'descriptors_discovered': True,
+                        'get_descriptor': make_get_descriptor(char_data['handle'])
+                    })()
+                    cached_chars.append(char)
+
+                # Replace service characteristics with cached ones
+                hid_service.characteristics = cached_chars
+                characteristics_cached = True
+                print(color(f">>> Loaded {len(cached_chars)} characteristics from cache", 'green'))
+            except Exception as e:
+                logging.warning(f"Failed to load cached characteristics: {e}")
+                characteristics_cached = False
+
+        # Discover characteristics if not cached (pass service as named argument)
+        if not characteristics_cached:
+            print(color(">>> Discovering characteristics...", 'cyan'))
+            await self.peer.discover_characteristics(service=hid_service)
+            print(color(f">>> Discovered {len(hid_service.characteristics)} characteristics", 'green'))
+
+        # Track report references and characteristics for caching
+        report_refs = {}
+        characteristics_to_cache = []
 
         for char in hid_service.characteristics:
             print(color(f"    Characteristic: {char.uuid}", 'cyan'))
+
+            # Collect characteristic for caching (if not already cached)
+            if not characteristics_cached:
+                # Store UUID as full hex string (with dashes) for reliable reconstruction
+                uuid_hex = char.uuid.to_hex_str()
+                # Convert short form (e.g., "2A4B") to full UUID format
+                if len(uuid_hex) == 4:
+                    uuid_full = f"0000{uuid_hex}-0000-1000-8000-00805F9B34FB"
+                else:
+                    uuid_full = uuid_hex  # Already in full format
+
+                characteristics_to_cache.append({
+                    'uuid': uuid_full,
+                    'handle': char.handle,
+                    'properties': getattr(char, 'properties', 0)
+                })
 
             if char.uuid == GATT_HID_REPORT_MAP_CHARACTERISTIC:
                 # Read report map (HID descriptor) only if not cached
@@ -524,9 +692,12 @@ class BLEHIDHost:
                         print(color(f"    Report Map: {len(self.report_map)} bytes", 'green'))
                         print(color(f"    Report Map (hex): {self.report_map.hex()}", 'cyan'))
 
-                        # Save to cache
+                        # Save to cache (will be augmented with device_name later)
                         if self.current_device_address:
-                            cache_data = {'report_map': self.report_map.hex()}
+                            cache_data = {
+                                'report_map': self.report_map.hex(),
+                                'device_name': self.device_name  # May be None initially
+                            }
                             self._save_cache(self.current_device_address, cache_data)
                     except Exception as e:
                         print(color(f"    Failed to read report map: {e}", 'red'))
@@ -534,38 +705,99 @@ class BLEHIDHost:
                     print(color(f"    Using cached Report Map: {len(self.report_map)} bytes", 'cyan'))
 
             elif char.uuid == GATT_HID_REPORT_CHARACTERISTIC:
-                # Discover descriptors to find report reference (pass characteristic as named argument)
-                await self.peer.discover_descriptors(characteristic=char)
-
+                # Check cache for report reference first
                 report_id = 0
                 report_type = HID_REPORT_TYPE_INPUT
+                cached_report_ref = None
 
-                for desc in char.descriptors:
-                    if desc.type == GATT_REPORT_REFERENCE_DESCRIPTOR:
-                        try:
-                            ref_value = await self.peer.read_value(desc)
-                            if len(ref_value) >= 2:
-                                report_id = ref_value[0]
-                                report_type = ref_value[1]
-                        except Exception as e:
-                            print(color(f"    Failed to read report reference: {e}", 'yellow'))
+                if cache and 'report_refs' in cache:
+                    # Try to find cached report reference for this handle
+                    handle_key = str(char.handle)
+                    if handle_key in cache['report_refs']:
+                        cached_report_ref = cache['report_refs'][handle_key]
+                        report_id = cached_report_ref['id']
+                        report_type = cached_report_ref['type']
+                        print(color(f"    Report ID: {report_id}, Type: {report_type} (cached)", 'cyan'))
 
-                print(color(f"    Report ID: {report_id}, Type: {report_type}", 'cyan'))
+                if not cached_report_ref:
+                    # Discover descriptors to find report reference (pass characteristic as named argument)
+                    await self.peer.discover_descriptors(characteristic=char)
+
+                    for desc in char.descriptors:
+                        if desc.type == GATT_REPORT_REFERENCE_DESCRIPTOR:
+                            try:
+                                ref_value = await self.peer.read_value(desc)
+                                if len(ref_value) >= 2:
+                                    report_id = ref_value[0]
+                                    report_type = ref_value[1]
+                            except Exception as e:
+                                print(color(f"    Failed to read report reference: {e}", 'yellow'))
+
+                    print(color(f"    Report ID: {report_id}, Type: {report_type}", 'cyan'))
 
                 if report_type == HID_REPORT_TYPE_INPUT:
                     self.hid_reports[report_id] = char
                     # Don't subscribe yet - will do that after UHID device is created
 
+                # Store report reference for caching (even if not input report)
+                if not cached_report_ref:
+                    report_refs[str(char.handle)] = {
+                        'id': report_id,
+                        'type': report_type
+                    }
+
+        # Update cache with report references and characteristics if we discovered any new ones
+        if (report_refs or characteristics_to_cache) and self.current_device_address:
+            try:
+                updates = []
+                if report_refs:
+                    updates.append(f"{len(report_refs)} report references")
+                if characteristics_to_cache:
+                    updates.append(f"{len(characteristics_to_cache)} characteristics")
+                print(color(f">>> Updating cache with {', '.join(updates)}...", 'blue'))
+
+                # Load existing cache or create new one
+                existing_cache = self._load_cache(self.current_device_address)
+                if not existing_cache:
+                    existing_cache = {}
+
+                # Update with new report refs
+                if report_refs:
+                    if 'report_refs' not in existing_cache:
+                        existing_cache['report_refs'] = {}
+                    existing_cache['report_refs'].update(report_refs)
+
+                # Update with new characteristics
+                if characteristics_to_cache:
+                    existing_cache['characteristics'] = characteristics_to_cache
+
+                # Ensure report_map and device_name are present
+                if self.report_map:
+                    existing_cache['report_map'] = self.report_map.hex()
+                if self.device_name:
+                    existing_cache['device_name'] = self.device_name
+
+                self._save_cache(self.current_device_address, existing_cache)
+                print(color(f">>> Cache updated successfully", 'green'))
+            except Exception as e:
+                logging.warning(f"Failed to update cache: {e}")
+        else:
+            print(color(">>> All data loaded from cache", 'green'))
+
         return True
 
     async def subscribe_to_reports(self):
-        """Subscribe to HID input report notifications"""
-        for report_id, char in self.hid_reports.items():
+        """Subscribe to HID input report notifications in parallel"""
+        async def subscribe_single(report_id, char):
             try:
                 await self.peer.subscribe(char, self._on_hid_report)
                 print(color(f">>> Subscribed to input report {report_id}", 'green'))
             except Exception as e:
                 print(color(f">>> Failed to subscribe to report {report_id}: {e}", 'yellow'))
+
+        # Subscribe to all reports in parallel for faster startup
+        tasks = [subscribe_single(report_id, char) for report_id, char in self.hid_reports.items()]
+        await asyncio.gather(*tasks, return_exceptions=True)
 
     def _map_button_combination(self, button_state, x_movement=0, y_movement=0):
         """
@@ -758,11 +990,23 @@ class BLEHIDHost:
         print(color(f"    Patched descriptor: {len(original_descriptor)} -> {len(patched)} bytes", 'cyan'))
         return patched
 
-    async def create_uhid_device(self, name: str = "BLE HID Device"):
-        """Create a virtual HID device using UHID"""
+    async def create_uhid_device(self, name: str = None):
+        """Create a virtual HID device using UHID
+
+        Args:
+            name: Optional name override. If not provided, uses self.device_name
+                  (from Generic Access Service), falling back to "BLE HID Device"
+        """
         if not self.report_map:
             print(color(">>> No report map available!", 'red'))
             return False
+
+        # Use actual device name if available, otherwise fall back to provided name or default
+        if name is None:
+            if self.device_name:
+                name = self.device_name
+            else:
+                name = "BLE HID Device"
 
         # Check if descriptor patching is enabled via environment variable
         enable_patching = os.environ.get('KINDLE_BLE_HID_PATCH_DESCRIPTOR', '').lower() in ('1', 'true', 'yes')
@@ -778,6 +1022,7 @@ class BLEHIDHost:
         vid = 0x0001
         pid = 0x0001
 
+        print(color(f">>> Creating UHID device: {name}", 'cyan'))
         self.uhid_device = UHIDDevice(name, vid, pid, descriptor)
         return await self.uhid_device.create()
 
