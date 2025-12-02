@@ -39,9 +39,9 @@ class BLEHIDDaemon:
         self.devices = []
         self.running = False
         self.tasks = []
-        self.host = None
+        self.hosts = {}  # address -> BLEHIDHost instance (one per device)
         self.connections = {}  # address -> connection info
-        self.disconnect_event = None  # Event to signal disconnection
+        self.disconnect_events = {}  # address -> asyncio.Event
         self.last_activity_time = time.time()  # Track last user activity
 
     def load_devices(self):
@@ -119,16 +119,24 @@ class BLEHIDDaemon:
 
     async def connect_device(self, address):
         """Connect to a device with auto-reconnect based on Kindle activity"""
+        # Create a dedicated host instance for this device
+        if address not in self.hosts:
+            self.hosts[address] = BLEHIDHost(TRANSPORT)
+            await self.hosts[address].start()
+            logger.info(f"Created dedicated Bumble host for {address}")
+
+        host = self.hosts[address]
+
         while self.running:
             try:
                 logger.info(f"Connecting to {address}...")
 
                 # Create disconnect event for this connection
-                self.disconnect_event = asyncio.Event()
+                self.disconnect_events[address] = asyncio.Event()
 
                 # Connect to device with shorter timeout
                 try:
-                    await self.host.connect(address, timeout=CONNECTION_TIMEOUT)
+                    await host.connect(address, timeout=CONNECTION_TIMEOUT)
                     logger.info(f"Connected to {address}")
                 except AssertionError as ae:
                     # Handle Bumble's assertion error when own_address_type is None
@@ -139,14 +147,15 @@ class BLEHIDDaemon:
 
                         # Clean up current host
                         try:
-                            await self.host.cleanup()
+                            await host.cleanup()
                         except Exception:
                             pass
 
                         # Recreate host with fresh state
                         from kindle_ble_hid import BLEHIDHost
-                        self.host = BLEHIDHost(TRANSPORT)
-                        await self.host.start()
+                        self.hosts[address] = BLEHIDHost(TRANSPORT)
+                        await self.hosts[address].start()
+                        host = self.hosts[address]
                         logger.info("Host recreated, will retry connection")
                         raise TimeoutError("Host reset needed")
                     else:
@@ -156,40 +165,40 @@ class BLEHIDDaemon:
                 # Set up disconnection callback
                 def on_disconnect(reason):
                     logger.warning(f"Disconnected from {address}: reason={reason}")
-                    self.disconnect_event.set()
+                    self.disconnect_events[address].set()
 
-                if self.host.connection:
-                    self.host.connection.on('disconnection', on_disconnect)
+                if host.connection:
+                    host.connection.on('disconnection', on_disconnect)
 
                 # Pair
                 logger.info(f"Pairing with {address}...")
-                await self.host.pair()
+                await host.pair()
                 logger.info(f"Paired with {address}")
 
                 # Discover HID service
                 logger.info(f"Discovering HID service on {address}...")
-                if await self.host.discover_hid_service():
+                if await host.discover_hid_service():
                     logger.info(f"Creating UHID device for {address}...")
-                    uhid_created = await self.host.create_uhid_device(f"BLE HID {address}")
+                    uhid_created = await host.create_uhid_device(f"BLE HID {address}")
                     if not uhid_created:
                         logger.error(f"Failed to create UHID device for {address}")
                         raise Exception("UHID device creation failed")
 
                     # Now subscribe to HID reports (AFTER UHID device is created)
                     logger.info(f"Subscribing to HID reports from {address}...")
-                    await self.host.subscribe_to_reports()
+                    await host.subscribe_to_reports()
 
                     logger.info(f"Successfully connected to {address}")
 
                     # Store connection info
                     self.connections[address] = {
-                        'connection': self.host.connection,
-                        'uhid': self.host.uhid_device
+                        'connection': host.connection,
+                        'uhid': host.uhid_device
                     }
 
                     # Wait for disconnection using event
                     logger.info(f"Monitoring connection to {address}...")
-                    await self.disconnect_event.wait()
+                    await self.disconnect_events[address].wait()
 
                     logger.warning(f"Disconnected from {address}")
                 else:
@@ -235,24 +244,21 @@ class BLEHIDDaemon:
             return
 
         try:
-            # Create single Bumble host instance
-            logger.info("Initializing Bumble BLE host...")
-            self.host = BLEHIDHost(TRANSPORT)
-            await self.host.start()
-            logger.info("Bumble BLE host started")
+            logger.info(f"Starting daemon with {len(self.devices)} device(s) configured")
 
             # Start activity monitoring in background
             activity_task = asyncio.create_task(self.monitor_activity())
 
-            # NOTE: For now, only support ONE device at a time
-            # Bumble can handle multiple connections, but our current
-            # BLEHIDHost implementation is designed for single device use
-            if len(self.devices) > 1:
-                logger.warning(f"Multiple devices configured ({len(self.devices)}), but only connecting to first one")
-                logger.warning("Multi-device support requires code changes")
+            # Create connection tasks for all configured devices
+            # Each device gets its own Bumble host instance and runs in parallel
+            connection_tasks = []
+            for device_address in self.devices:
+                task = asyncio.create_task(self.connect_device(device_address))
+                connection_tasks.append(task)
+                logger.info(f"Started connection task for {device_address}")
 
-            # Connect to first device only
-            await self.connect_device(self.devices[0])
+            # Wait for all connection tasks (they run indefinitely until stopped)
+            await asyncio.gather(*connection_tasks, return_exceptions=True)
 
         except KeyboardInterrupt:
             logger.info("Received interrupt signal")
@@ -272,12 +278,13 @@ class BLEHIDDaemon:
             except:
                 pass
 
-        # Clean up host
-        if self.host:
+        # Clean up all host instances
+        for address, host in list(self.hosts.items()):
             try:
-                await self.host.cleanup()
-            except:
-                pass
+                logger.info(f"Cleaning up host for {address}")
+                await host.cleanup()
+            except Exception as e:
+                logger.error(f"Error cleaning up host for {address}: {e}")
 
         logger.info("Daemon stopped")
 

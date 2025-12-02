@@ -1,96 +1,93 @@
 # BLE HID Daemon Notes
 
-## Current Limitation: Single Device Only
+## Multi-Device Support
 
-**Important:** The current daemon implementation only supports connecting to ONE BLE HID device at a time.
+The daemon now supports **multiple BLE HID devices simultaneously**:
 
-### Why?
-
-The `BLEHIDHost` class was designed for single-device usage (similar to the original interactive script). Key issues:
-
-1. **Shared State:** `BLEHIDHost` stores connection state in instance variables (`self.connection`, `self.peer`, `self.uhid_device`)
-2. **Transport:** Only one process can access `/dev/stpbt` at a time
-3. **Device Instance:** One Bumble `Device` instance per daemon
-
-### Current Behavior
-
-If you configure multiple devices in `devices.conf`:
-- Only the **first device** will be connected
-- A warning is logged: "Multiple devices configured, but only connecting to first one"
+- Each device gets its own dedicated Bumble host instance
+- Devices run in parallel with independent connection/reconnection logic
+- Add multiple device addresses to `/mnt/us/bumble_ble_hid/devices.conf` (one per line)
+- Each device creates its own UHID virtual input device
 
 ### Configuration
 
 Edit `/mnt/us/bumble_ble_hid/devices.conf`:
 
 ```bash
-# Only ONE device will be connected (the first uncommented address)
+# Multiple devices - all will connect
+5C:2B:3E:50:4F:04  # BLE-M3 Mouse
+AA:BB:CC:DD:EE:FF  # Keyboard
+11:22:33:44:55:66  # Gamepad
 
-# Device 1 (will connect)
-5C:2B:3E:50:4F:04
-
-# Device 2 (will be ignored)
-# 11:22:33:33:DA:AF
+# Comment out devices you don't want to connect
+# 99:88:77:66:55:44
 ```
 
-To switch devices:
-1. Comment out the current device with `#`
-2. Uncomment the device you want to use
-3. Restart the daemon: `/etc/init.d/ble-hid restart`
+### How It Works
 
-### Multi-Device Support (Future)
+1. **Separate Host Instances:** Each device gets its own `BLEHIDHost` instance with dedicated state
+2. **Parallel Connections:** All devices connect concurrently via `asyncio.gather()`
+3. **Independent Reconnection:** Each device has its own reconnection logic and timing
+4. **Shared Transport:** All hosts share the same `/dev/stpbt` transport (Bumble handles multiplexing)
 
-To support multiple devices simultaneously, `BLEHIDHost` would need refactoring:
+### Architecture
 
-1. **Connection Management:**
-   ```python
-   class BLEHIDHost:
-       def __init__(self, transport):
-           self.transport = transport
-           self.device = None
-           self.connections = {}  # address -> {peer, uhid, connection}
+```
+/dev/stpbt (MediaTek BT Controller)
+     |
+     v
+Bumble Transport (shared)
+     |
+     +---> BLEHIDHost #1 ---> Device 1 ---> /dev/uhid ---> Input Device 1
+     |
+     +---> BLEHIDHost #2 ---> Device 2 ---> /dev/uhid ---> Input Device 2
+     |
+     +---> BLEHIDHost #3 ---> Device 3 ---> /dev/uhid ---> Input Device 3
+```
 
-       async def connect_device(self, address):
-           connection = await self.device.connect(address)
-           peer = Peer(connection)
-           # Store per-device state
-           self.connections[address] = {
-               'connection': connection,
-               'peer': peer,
-               'uhid': None,
-               # ... other state
-           }
-   ```
+## Pure Pass-Through Mode
 
-2. **Event Handling:** Per-device event handlers instead of instance-level
-3. **UHID Management:** One UHID device per connected BLE device
-4. **Report Routing:** Route HID reports to correct UHID device based on source
+By default, the daemon operates in **pure pass-through mode**:
+- HID reports are forwarded unchanged to UHID
+- No device-specific button mapping or translation
+- Works with any BLE HID device (keyboards, mice, gamepads, etc.)
 
-### Workaround: Multiple Manual Connections
+### Legacy BLE-M3 Mode
 
-You can still connect to different devices manually using the helper script:
+For backwards compatibility with the BLE-M3 clicker, you can enable legacy mode:
 
 ```bash
-# Terminal 1: Connect to device 1
-ssh kindle
-cd /mnt/us/bumble_ble_hid
-./kindle_ble_hid.sh 5C:2B:3E:50:4F:04
-
-# Terminal 2: Connect to device 2 (won't work - /dev/stpbt busy)
-# This will fail with "Resource busy"
+export KINDLE_BLE_HID_PATCH_DESCRIPTOR=1
+/etc/init.d/ble-hid start
 ```
 
-Unfortunately, even manual connections can't be parallel due to the `/dev/stpbt` limitation.
+This enables:
+- Report descriptor patching (adds button report IDs)
+- BLE-M3 specific button mapping
+- Movement-based button detection
+- 500ms debouncing
 
-## Solutions for Multiple Devices
+**Note:** For new projects, use pure pass-through mode and handle device-specific logic in a separate userspace daemon.
 
-### Option 1: One Device at a Time (Current)
-Use the daemon for your primary device, switch as needed.
+## Device-Specific Input Translation
 
-### Option 2: Code Refactoring (Future)
-Refactor `BLEHIDHost` to properly support multiple connections with one Device instance.
+For devices that need custom input mapping (like the BLE-M3 clicker), create a separate userspace daemon:
 
-### Option 3: BlueZ + Userspace SMP (Alternative)
-Use BlueZ for device management with a userspace SMP implementation (more complex).
+1. **BLE Stack (this project):** Handles BLE connection, pairing, and raw HID report forwarding
+2. **Input Translator (separate daemon):** Monitors `/dev/input/eventX`, translates events, injects via `uinput`
+
+This separation follows Unix philosophy and allows:
+- Reusable BLE HID stack for all devices
+- Device-specific logic isolated and testable
+- Easier maintenance and debugging
+
+Example: See `/home/lzampier/Clone/BLE-M3-android-interceptor/` for a C-based input translator.
+
+## Limitations
+
+1. **Python runtime**: Requires Python 3.8 on device
+2. **Power consumption**: Continuous BLE scanning/connection may impact battery life
+3. **Shared transport**: All devices must use the same Bluetooth controller (`/dev/stpbt`)
 
 ## Error: "Resource busy: '/dev/stpbt'"
 
@@ -113,3 +110,12 @@ sleep 2
 # Restart
 /etc/init.d/ble-hid start
 ```
+
+## Reconnection Strategy
+
+The daemon uses activity-aware reconnection delays:
+
+- **Active Mode** (user input detected in last 60s): Reconnect every 3 seconds
+- **Idle Mode** (no input for 60s): Reconnect every 30 seconds
+
+This reduces battery drain when the Kindle is not in use while maintaining responsive reconnection during active use.

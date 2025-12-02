@@ -506,6 +506,9 @@ class BLEHIDHost:
         """
         Map device's button combinations to clean individual buttons.
 
+        LEGACY: This is BLE-M3 specific logic kept for backwards compatibility.
+        Only active when KINDLE_BLE_HID_PATCH_DESCRIPTOR is enabled.
+
         The clicker is weird - it sends mouse movement data with button presses,
         and the movement patterns help distinguish which button was pressed.
 
@@ -563,51 +566,60 @@ class BLEHIDHost:
             logging.error("Received HID report but uhid_device is None!")
             return
 
-        if len(report_data) < 2:
-            return
+        # Check if BLE-M3 specific processing is enabled
+        enable_ble_m3_logic = os.environ.get('KINDLE_BLE_HID_PATCH_DESCRIPTOR', '').lower() in ('1', 'true', 'yes')
 
-        # Extract report ID, button state, and movement
-        report_id = report_data[0]
-        button_state = report_data[1]
-        x_movement = report_data[2] if len(report_data) > 2 else 0
-        y_movement = report_data[3] if len(report_data) > 3 else 0
-
-        # Detect if any button is pressed (non-zero button state)
-        if button_state != 0:
-            # Debounce: ignore ANY button press within 500ms (global across all report IDs)
-            current_time = time.time()
-
-            if current_time - self.last_press_time < 0.5:
-                print(color(f"    Debounced (too soon)", 'blue'))
+        if enable_ble_m3_logic:
+            # LEGACY BLE-M3 specific processing with button mapping and debouncing
+            if len(report_data) < 2:
                 return
 
-            # Map the button combination to a clean single button using movement direction
-            mapped_button, button_name = self._map_button_combination(button_state, x_movement, y_movement)
+            # Extract report ID, button state, and movement
+            report_id = report_data[0]
+            button_state = report_data[1]
+            x_movement = report_data[2] if len(report_data) > 2 else 0
+            y_movement = report_data[3] if len(report_data) > 3 else 0
 
-            if mapped_button is None:
-                print(color(f"    Unknown button combination: 0x{button_state:02x}", 'yellow'))
-                return
+            # Detect if any button is pressed (non-zero button state)
+            if button_state != 0:
+                # Debounce: ignore ANY button press within 500ms (global across all report IDs)
+                current_time = time.time()
 
-            print(color(f"    Detected: {button_name} (raw: 0x{button_state:02x}, x:{x_movement:02x}, y:{y_movement:02x})", 'cyan'))
+                if current_time - self.last_press_time < 0.5:
+                    print(color(f"    Debounced (too soon)", 'blue'))
+                    return
 
-            # Create clean button report with mapped button
-            clean_data = bytearray(report_data)
-            clean_data[1] = mapped_button  # Replace with clean single button
+                # Map the button combination to a clean single button using movement direction
+                mapped_button, button_name = self._map_button_combination(button_state, x_movement, y_movement)
 
-            # Send the press event
-            translated_data = self._translate_report_id(bytes(clean_data))
-            self.uhid_device.send_input(translated_data)
-            print(color(f"    Sent clean button: 0x{mapped_button:02x}", 'green'))
+                if mapped_button is None:
+                    print(color(f"    Unknown button combination: 0x{button_state:02x}", 'yellow'))
+                    return
 
-            # Immediately synthesize a release event (all buttons off)
-            release_data = bytearray(report_data)
-            release_data[1] = 0x00  # Clear all buttons
-            translated_release = self._translate_report_id(bytes(release_data))
-            self.uhid_device.send_input(translated_release)
-            print(color(f"    Auto-release sent", 'yellow'))
+                print(color(f"    Detected: {button_name} (raw: 0x{button_state:02x}, x:{x_movement:02x}, y:{y_movement:02x})", 'cyan'))
 
-            # Update global debounce timestamp
-            self.last_press_time = current_time
+                # Create clean button report with mapped button
+                clean_data = bytearray(report_data)
+                clean_data[1] = mapped_button  # Replace with clean single button
+
+                # Send the press event
+                translated_data = self._translate_report_id(bytes(clean_data))
+                self.uhid_device.send_input(translated_data)
+                print(color(f"    Sent clean button: 0x{mapped_button:02x}", 'green'))
+
+                # Immediately synthesize a release event (all buttons off)
+                release_data = bytearray(report_data)
+                release_data[1] = 0x00  # Clear all buttons
+                translated_release = self._translate_report_id(bytes(release_data))
+                self.uhid_device.send_input(translated_release)
+                print(color(f"    Auto-release sent", 'yellow'))
+
+                # Update global debounce timestamp
+                self.last_press_time = current_time
+        else:
+            # Pure pass-through mode: send reports as-is to UHID
+            print(color(f"    Pure pass-through mode: forwarding report unchanged", 'cyan'))
+            self.uhid_device.send_input(report_data)
 
     def _translate_report_id(self, report_data):
         """
@@ -689,14 +701,21 @@ class BLEHIDHost:
             print(color(">>> No report map available!", 'red'))
             return False
 
-        # Patch the report descriptor to add missing button reports (IDs 0 and 7)
-        patched_descriptor = self._patch_report_descriptor(self.report_map)
+        # Check if descriptor patching is enabled via environment variable
+        enable_patching = os.environ.get('KINDLE_BLE_HID_PATCH_DESCRIPTOR', '').lower() in ('1', 'true', 'yes')
+
+        if enable_patching:
+            print(color(">>> Patching report descriptor (KINDLE_BLE_HID_PATCH_DESCRIPTOR enabled)", 'yellow'))
+            descriptor = self._patch_report_descriptor(self.report_map)
+        else:
+            print(color(">>> Using original report descriptor (pure pass-through)", 'green'))
+            descriptor = self.report_map
 
         # Use dummy VID/PID for now
         vid = 0x0001
         pid = 0x0001
 
-        self.uhid_device = UHIDDevice(name, vid, pid, patched_descriptor)
+        self.uhid_device = UHIDDevice(name, vid, pid, descriptor)
         return await self.uhid_device.create()
 
     async def run(self, target_address: str):
