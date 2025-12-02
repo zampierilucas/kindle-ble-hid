@@ -21,6 +21,19 @@ start() {
         return 1
     fi
 
+    # Load Bluetooth kernel module if not loaded
+    if ! lsmod | grep -q wmt_cdev_bt; then
+        echo "Loading wmt_cdev_bt kernel module..."
+        /sbin/insmod /lib/modules/4.9.77-lab126/extra/wmt_cdev_bt.ko
+        sleep 1
+    fi
+
+    # Verify /dev/stpbt exists
+    if [ ! -c /dev/stpbt ]; then
+        echo "ERROR: /dev/stpbt device not available"
+        return 1
+    fi
+
     # Stop any existing Bluetooth processes
     killall bluetoothd 2>/dev/null || true
     killall vhci_stpbt_bridge 2>/dev/null || true

@@ -73,52 +73,36 @@ Interpreter: /lib/ld-linux.so.3
 | falcon | 31180 | 0 [permanent] |
 | hwtcon_v2 | 142808 | 4 |
 
-## Bluetooth Status - WORKING (BlueZ)
+## Bluetooth Status - WORKING (Bumble)
 
-### BlueZ Setup (Recommended)
+### Bumble BLE HID Setup (Recommended)
 
-Amazon's BT stack has been disabled in favor of standard BlueZ 5.43. This provides better compatibility with standard Bluetooth tools and protocols.
-
-**IMPORTANT LIMITATION:** BLE HID device pairing (keyboards, mice) does NOT work due to kernel SMP initialization issue. See `BLE_SMP_LIMITATION.md` for full technical details. Classic Bluetooth and non-secure BLE operations work fine.
+Amazon's BT stack has been disabled in favor of Google Bumble, a full Bluetooth stack implemented in Python. This bypasses the kernel SMP bug that prevented BLE HID device pairing with the BlueZ/VHCI approach.
 
 **Quick Start:**
 
 ```bash
-/mnt/us/bluetooth/scripts/start_bluez.sh
+/mnt/us/bumble_ble_hid/start_ble_hid.sh
 ```
+
+This will scan for BLE HID devices and allow you to pair and connect.
 
 **Manual Setup:**
 
 ```bash
-# Load kernel modules
-modprobe bluetooth hci_uart hci_vhci
-insmod /lib/modules/4.9.77-lab126/extra/wmt_cdev_bt.ko
+# Stop any existing Bluetooth processes
+killall bluetoothd 2>/dev/null || true
+killall vhci_stpbt_bridge 2>/dev/null || true
 
-# Start VHCI bridge (creates HCI interface from /dev/stpbt)
-/mnt/us/bluetooth/bin/vhci_stpbt_bridge &
-
-# Bring up HCI interface
-export LD_LIBRARY_PATH=/mnt/us/bluetooth/libs
-/mnt/us/bluetooth/bin/ld-musl-armhf.so.1 /mnt/us/bluetooth/bin/hciconfig hci0 up
-
-# Start bluetoothd
-/mnt/us/bluetooth/bin/ld-musl-armhf.so.1 /mnt/us/bluetooth/libexec/bluetooth/bluetoothd &
+# Run Bumble BLE HID daemon
+cd /mnt/us/bumble_ble_hid
+python3 kindle_ble_hid.py --transport file:/dev/stpbt --config device_config.json
 ```
 
-**Pairing a Device:**
+**Connecting to a Specific Device:**
 
 ```bash
-export LD_LIBRARY_PATH=/mnt/us/bluetooth/libs
-/mnt/us/bluetooth/bin/ld-musl-armhf.so.1 /mnt/us/bluetooth/bin/bluetoothctl
-
-# In bluetoothctl:
-power on
-agent on
-default-agent
-scan on
-# Wait for your device to appear, note its MAC address
-pair AA:BB:CC:DD:EE:FF
-connect AA:BB:CC:DD:EE:FF
+/mnt/us/bumble_ble_hid/start_ble_hid.sh -a AA:BB:CC:DD:EE:FF
 ```
 
 ### Architecture
@@ -128,11 +112,12 @@ The Kindle uses a MediaTek MT8512 combo chip with integrated WiFi/BT. Communicat
 - **WMT Driver**: `wmt_drv` - Wireless Management Transport core driver
 - **BT Character Device**: `wmt_cdev_bt` - Exposes `/dev/stpbt` for BT data
 - **STP Protocol**: Serial Transport Protocol multiplexes WiFi/BT/GPS/FM
-- **VHCI Bridge**: `vhci_stpbt_bridge` - Bridges `/dev/stpbt` to virtual HCI for BlueZ
+- **Bumble Stack**: Google Bumble reads/writes HCI packets directly from `/dev/stpbt`
+- **UHID**: Bumble creates virtual HID devices via `/dev/uhid` for input injection
 
 ### Amazon BT Stack (DISABLED)
 
-Amazon's ACE (Amazon Common Executive) BT stack has been disabled to allow BlueZ to function. The following services are disabled on boot:
+Amazon's ACE (Amazon Common Executive) BT stack has been disabled to allow custom Bluetooth implementations like Bumble to access the hardware. The following services are disabled on boot:
 
 - `btmanagerd` - Main ACE BT manager daemon
 - `acsbtfd` - ACE BT framework daemon
@@ -161,25 +146,26 @@ Amazon's ACE (Amazon Common Executive) BT stack has been disabled to allow BlueZ
 - `/etc/upstart/btmanagerd.conf` - Upstart service config
 - `/etc/sysconfig/platform_variables` - Contains `btmanagerd=1`
 
-### BlueZ Tools Available
+### Bumble Implementation
 
-All BlueZ tools are installed in `/mnt/us/bluetooth/bin/` and `/mnt/us/bluetooth/libexec/bluetooth/`:
+The current implementation uses Google Bumble for BLE HID device support:
 
-- `bluetoothctl` - Interactive Bluetooth control
-- `hciconfig` - HCI device configuration
-- `hcitool` - HCI tool for device discovery and connections
-- `bluetoothd` - Bluetooth daemon (in /mnt/us/libexec/bluetooth/)
-- `btmon` - Bluetooth monitor for debugging
-- And many more (see /mnt/us/bin/)
+- **Python Stack**: Full Bluetooth stack implemented in Python
+- **Direct HCI Access**: Reads/writes H4 HCI packets directly from `/dev/stpbt`
+- **SMP Support**: Complete Security Manager Protocol implementation (pairing, bonding, encryption)
+- **UHID Integration**: Creates virtual HID devices via Linux UHID interface
+- **Multi-device**: Supports multiple simultaneous BLE HID connections
+
+Main script: `/mnt/us/bumble_ble_hid/kindle_ble_hid.py`
 
 ### Kernel Modules
 
 Bluetooth modules in `/lib/modules/4.9.77-lab126/`:
-- `bluetooth.ko` - Core Bluetooth subsystem
-- `hci_uart.ko` - UART HCI driver
-- `hci_vhci.ko` - Virtual HCI driver (used by vhci_stpbt_bridge)
-- `wmt_cdev_bt.ko` - MediaTek WMT BT character device (in extra/)
-- Others: btusb.ko, btbcm.ko, btintel.ko, btrtl.ko, btqca.ko
+- `wmt_cdev_bt.ko` - MediaTek WMT BT character device (in extra/) - **REQUIRED**
+- `bluetooth.ko` - Core Bluetooth subsystem (not used by Bumble)
+- `hci_uart.ko` - UART HCI driver (not used)
+- `hci_vhci.ko` - Virtual HCI driver (not used, only needed for BlueZ approach)
+- Others: btusb.ko, btbcm.ko, btintel.ko, btrtl.ko, btqca.ko (not used)
 
 ## Storage Layout
 
@@ -199,9 +185,9 @@ Bluetooth modules in `/lib/modules/4.9.77-lab126/`:
 
 | Interface | IP | MAC | Notes |
 |-----------|-------|-----|-------|
-| wlan0 | 192.168.0.65 | 08:c2:24:e1:35:a3 | WiFi (MediaTek) |
+| wlan0 | 192.168.0.65 (local network) | 08:c2:24:e1:35:a3 | WiFi (MediaTek) |
 | usb0 | ee:19:00:00:00:00 | USB gadget (RNDIS/ECM) |
-| tailscale0 | - | - | Tailscale VPN |
+| tailscale0 | 100.x.x.x | - | Tailscale VPN (hostname: kindle) |
 
 ## Important Paths
 
@@ -243,6 +229,10 @@ Key settings:
 ## SSH Access
 
 ```bash
+# Via Tailscale (recommended - works from anywhere)
+ssh root@kindle
+
+# Via local network
 ssh root@192.168.0.65
 ```
 

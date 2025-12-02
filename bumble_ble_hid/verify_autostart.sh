@@ -67,7 +67,7 @@ else
     echo "[ACTION NEEDED] Service is NOT configured for auto-start"
     echo ""
     echo "To enable auto-start, run:"
-    echo "  cp /mnt/us/bumble_ble_hid/ble-hid-init.sh /etc/init.d/ble-hid"
+    echo "  cp /mnt/us/bumble_ble_hid/ble-hid.init /etc/init.d/ble-hid"
     echo "  chmod +x /etc/init.d/ble-hid"
     echo "  update-rc.d ble-hid defaults"
 fi
