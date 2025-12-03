@@ -202,14 +202,7 @@ class BLEHIDDaemon:
                 # Discover HID service
                 logger.info(f"Discovering HID service on {address}...")
                 if await host.discover_hid_service():
-                    logger.info(f"Creating UHID device for {address}...")
-                    # create_uhid_device will now use the actual device name from Generic Access Service
-                    uhid_created = await host.create_uhid_device()
-                    if not uhid_created:
-                        logger.error(f"Failed to create UHID device for {address}")
-                        raise Exception("UHID device creation failed")
-
-                    # Now subscribe to HID reports (AFTER UHID device is created)
+                    # Subscribe to HID reports (script execution mode)
                     logger.info(f"Subscribing to HID reports from {address}...")
                     await host.subscribe_to_reports()
 
@@ -217,8 +210,7 @@ class BLEHIDDaemon:
 
                     # Store connection info
                     self.connections[address] = {
-                        'connection': host.connection,
-                        'uhid': host.uhid_device
+                        'connection': host.connection
                     }
 
                     # Wait for disconnection using event
@@ -238,11 +230,6 @@ class BLEHIDDaemon:
 
             # Clean up connection
             if address in self.connections:
-                try:
-                    if self.connections[address].get('uhid'):
-                        self.connections[address]['uhid'].destroy()
-                except:
-                    pass
                 del self.connections[address]
 
             if not self.running:
@@ -300,14 +287,6 @@ class BLEHIDDaemon:
         """Stop the daemon and clean up"""
         logger.info("Stopping daemon...")
         self.running = False
-
-        # Clean up all connections
-        for address, conn_info in list(self.connections.items()):
-            try:
-                if conn_info.get('uhid'):
-                    conn_info['uhid'].destroy()
-            except:
-                pass
 
         # Clean up all host instances
         for address, host in list(self.hosts.items()):

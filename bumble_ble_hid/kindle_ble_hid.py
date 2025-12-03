@@ -21,6 +21,7 @@ import json
 import logging
 import os
 import struct
+import subprocess
 import sys
 import time
 
@@ -64,15 +65,16 @@ HID_REPORT_TYPE_OUTPUT = 2
 HID_REPORT_TYPE_FEATURE = 3
 
 # -----------------------------------------------------------------------------
-# UHID Interface for Linux Input Injection
+# Configuration paths
 # -----------------------------------------------------------------------------
-UHID_DEVICE = '/dev/uhid'
-
 # GATT cache directory
 GATT_CACHE_DIR = '/mnt/us/bumble_ble_hid/cache'
 
 # Pairing keys storage
 PAIRING_KEYS_FILE = '/mnt/us/bumble_ble_hid/cache/pairing_keys.json'
+
+# Button configuration file
+BUTTON_CONFIG_FILE = '/mnt/us/bumble_ble_hid/button_config.json'
 
 # Timestamp tracker for performance debugging
 _last_timestamp = None
@@ -111,185 +113,69 @@ def _timestamped_print(*args, **kwargs):
 # Override print for this module
 print = _timestamped_print
 
-# UHID event types
-UHID_CREATE2 = 11
-UHID_DESTROY = 1
-UHID_INPUT2 = 12
-UHID_OUTPUT = 6
-UHID_START = 2
-UHID_STOP = 3
-UHID_OPEN = 4
-UHID_CLOSE = 5
 
-class UHIDDevice:
-    """Interface to /dev/uhid for creating virtual HID devices"""
+class ButtonScriptExecutor:
+    """Execute shell scripts based on button presses"""
 
-    def __init__(self, name: str, vid: int, pid: int, report_descriptor: bytes):
-        self.name = name
-        self.vid = vid
-        self.pid = pid
-        self.report_descriptor = report_descriptor
-        self.fd = None
-        self.running = False
-        self.event_loop_task = None
+    def __init__(self, config_path: str = BUTTON_CONFIG_FILE):
+        self.config_path = config_path
+        self.button_scripts = {}
+        self.debounce_ms = 500
+        self.log_button_presses = True
+        self.load_config()
 
-    async def create(self):
-        """Create the UHID device"""
+    def load_config(self):
+        """Load button-to-script mapping configuration"""
         try:
-            self.fd = os.open(UHID_DEVICE, os.O_RDWR | os.O_NONBLOCK)
-        except OSError as e:
-            logging.error(f"Failed to open {UHID_DEVICE}: {e}")
-            logging.error("Make sure you have permissions (run as root or add to input group)")
-            return False
+            with open(self.config_path, 'r') as f:
+                config = json.load(f)
 
-        # Build UHID_CREATE2 event
-        # struct uhid_create2_req {
-        #     __u8 name[128];
-        #     __u8 phys[64];
-        #     __u8 uniq[64];
-        #     __u16 rd_size;
-        #     __u16 bus;
-        #     __u32 vendor;
-        #     __u32 product;
-        #     __u32 version;
-        #     __u32 country;
-        #     __u8 rd_data[HID_MAX_DESCRIPTOR_SIZE]; /* 4096 */
-        # }
+            self.button_scripts = config.get('buttons', {})
+            self.debounce_ms = config.get('debounce_ms', 500)
+            self.log_button_presses = config.get('log_button_presses', True)
 
-        name_bytes = self.name.encode('utf-8')[:127] + b'\x00'
-        name_bytes = name_bytes.ljust(128, b'\x00')
+            print(color(f">>> Loaded button configuration from {self.config_path}", 'green'))
+            print(color(f">>> Configured {len(self.button_scripts)} button mappings", 'cyan'))
+            for button_hex, script_path in self.button_scripts.items():
+                print(color(f"    {button_hex} -> {script_path}", 'cyan'))
 
-        phys = b'bumble:ble-hid\x00'.ljust(64, b'\x00')
-        uniq = b'\x00' * 64
+        except FileNotFoundError:
+            print(color(f">>> Warning: Config file not found: {self.config_path}", 'yellow'))
+            print(color(f">>> Using default empty configuration", 'yellow'))
+        except json.JSONDecodeError as e:
+            print(color(f">>> Error parsing config file: {e}", 'red'))
+            print(color(f">>> Using default empty configuration", 'yellow'))
 
-        rd_size = len(self.report_descriptor)
-        bus = 0x05  # BUS_BLUETOOTH
+    def execute_button_script(self, button_code: int, button_name: str):
+        """Execute the script mapped to a button press"""
+        button_hex = f"0x{button_code:02x}"
 
-        # Pack the create2 request
-        create_req = struct.pack(
-            '<I',  # event type
-            UHID_CREATE2
-        )
-        create_req += name_bytes
-        create_req += phys
-        create_req += uniq
-        create_req += struct.pack('<HHIII',
-            rd_size,
-            bus,
-            self.vid,
-            self.pid,
-            0x0001,  # version
-        )
-        create_req += struct.pack('<I', 0)  # country
-        create_req += self.report_descriptor.ljust(4096, b'\x00')
+        if self.log_button_presses:
+            print(color(f">>> Button press: {button_name} (code: {button_hex})", 'green'))
 
-        try:
-            os.write(self.fd, create_req)
-            self.running = True
-            logging.info(f"Created UHID device: {self.name}")
+        script_path = self.button_scripts.get(button_hex)
 
-            # Start event loop to handle kernel responses
-            self.event_loop_task = asyncio.create_task(self._event_loop())
-
-            return True
-        except OSError as e:
-            logging.error(f"Failed to create UHID device: {e}")
-            return False
-
-    async def _event_loop(self):
-        """Read and handle kernel events from UHID"""
-        print(color(">>> UHID event loop started", 'green'))
-
-        while self.running:
-            try:
-                # Use asyncio to avoid blocking (10Hz polling is sufficient for HID)
-                await asyncio.sleep(0.1)
-
-                # Try to read event from kernel
-                try:
-                    data = os.read(self.fd, 4096)
-                except BlockingIOError:
-                    # No data available (non-blocking read)
-                    continue
-                except OSError as e:
-                    logging.error(f"Error reading UHID event: {e}")
-                    break
-
-                if len(data) < 4:
-                    continue
-
-                # Parse event type
-                event_type = struct.unpack('<I', data[:4])[0]
-
-                if event_type == UHID_START:
-                    print(color(">>> UHID: Received START from kernel", 'green'))
-                elif event_type == UHID_STOP:
-                    print(color(">>> UHID: Received STOP from kernel", 'yellow'))
-                elif event_type == UHID_OPEN:
-                    print(color(">>> UHID: Received OPEN from kernel (device ready!)", 'green'))
-                elif event_type == UHID_CLOSE:
-                    print(color(">>> UHID: Received CLOSE from kernel", 'yellow'))
-                elif event_type == UHID_OUTPUT:
-                    # Output report from kernel (e.g., LED state for keyboard)
-                    if len(data) >= 6:
-                        size = struct.unpack('<H', data[4:6])[0]
-                        output_data = data[6:6+size]
-                        print(color(f">>> UHID: Received OUTPUT from kernel: {output_data.hex()}", 'cyan'))
-                else:
-                    print(color(f">>> UHID: Unknown event type: {event_type}", 'yellow'))
-
-            except Exception as e:
-                logging.error(f"Error in UHID event loop: {e}")
-
-        print(color(">>> UHID event loop stopped", 'yellow'))
-
-    def send_input(self, report_data: bytes):
-        """Send an input report to the virtual HID device"""
-        if not self.running:
-            logging.error(f"UHID send_input: device not running (running={self.running})")
-            return
-        if self.fd is None:
-            logging.error(f"UHID send_input: fd is None")
+        if not script_path:
+            print(color(f">>> No script configured for button {button_hex}", 'yellow'))
             return
 
-        # struct uhid_input2_req {
-        #     __u16 size;
-        #     __u8 data[UHID_DATA_MAX]; /* 4096 */
-        # }
+        # Check if script exists
+        if not os.path.exists(script_path):
+            print(color(f">>> Script not found: {script_path}", 'red'))
+            return
 
-        event = struct.pack('<I', UHID_INPUT2)
-        event += struct.pack('<H', len(report_data))
-        event += report_data.ljust(4096, b'\x00')
-
+        # Execute script in background
         try:
-            bytes_written = os.write(self.fd, event)
-            print(color(f"    UHID: Sent {bytes_written} bytes (fd={self.fd}, expected={len(event)})", 'blue'))
-            if bytes_written != len(event):
-                logging.error(f"Partial write! Expected {len(event)}, wrote {bytes_written}")
-        except OSError as e:
-            logging.error(f"Failed to send input report: {e}")
+            print(color(f">>> Executing: {script_path}", 'cyan'))
+            subprocess.Popen(
+                [script_path],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                start_new_session=True  # Detach from parent process
+            )
+            print(color(f">>> Script launched successfully", 'green'))
         except Exception as e:
-            logging.error(f"Unexpected error in send_input: {e}")
-
-    def destroy(self):
-        """Destroy the UHID device"""
-        if self.fd is not None:
-            if self.running:
-                self.running = False
-
-                # Cancel event loop task
-                if self.event_loop_task and not self.event_loop_task.done():
-                    self.event_loop_task.cancel()
-
-                event = struct.pack('<I', UHID_DESTROY)
-                try:
-                    os.write(self.fd, event)
-                except OSError:
-                    pass
-
-            os.close(self.fd)
-            self.fd = None
-            logging.info("Destroyed UHID device")
+            print(color(f">>> Failed to execute script: {e}", 'red'))
 
 
 # -----------------------------------------------------------------------------
@@ -330,13 +216,14 @@ class BLEHIDHost:
         self.device = None
         self.connection = None
         self.peer = None
-        self.uhid_device = None
+        self.button_executor = ButtonScriptExecutor()
         self.hid_reports = {}  # report_id -> characteristic
         self.report_map = None
         self.last_button_state = {}  # report_id -> button_state (to detect changes)
         self.last_press_time = 0  # Global timestamp for debouncing (across all report IDs)
         self.current_device_address = None  # Track connected device for cache
         self.device_name = None  # BLE device name from Generic Access Service
+        self.device_type = None  # HID device type from HID Information (mouse=0x02, keyboard=0x01)
 
     async def start(self):
         """Initialize the Bumble device"""
@@ -467,8 +354,6 @@ class BLEHIDHost:
 
     def _on_disconnection(self, reason):
         print(color(f">>> Disconnected: reason={reason}", 'red'))
-        if self.uhid_device:
-            self.uhid_device.destroy()
 
     def _on_pairing(self, keys):
         print(color(">>> Pairing successful!", 'green'))
@@ -689,7 +574,21 @@ class BLEHIDHost:
                     'properties': getattr(char, 'properties', 0)
                 })
 
-            if char.uuid == GATT_HID_REPORT_MAP_CHARACTERISTIC:
+            if char.uuid == GATT_HID_INFORMATION_CHARACTERISTIC:
+                # Read HID Information to detect device type
+                try:
+                    value = await self.peer.read_value(char)
+                    if len(value) >= 4:
+                        # HID Information format: [bcdHID(2), bCountryCode(1), Flags(1)]
+                        # Flags byte bit 0-1: 00=reserved, 01=keyboard, 10=mouse, 11=reserved
+                        flags = value[3]
+                        self.device_type = flags & 0x03  # Extract device type bits
+                        device_type_name = {0: 'Unknown', 1: 'Keyboard', 2: 'Mouse', 3: 'Reserved'}.get(self.device_type, 'Unknown')
+                        print(color(f"    HID Information: Device Type = {device_type_name} (0x{self.device_type:02x})", 'green'))
+                except Exception as e:
+                    print(color(f"    Failed to read HID Information: {e}", 'yellow'))
+
+            elif char.uuid == GATT_HID_REPORT_MAP_CHARACTERISTIC:
                 # Read report map (HID descriptor) only if not cached
                 if not self.report_map:
                     try:
@@ -856,227 +755,45 @@ class BLEHIDHost:
         return (None, None)
 
     def _on_hid_report(self, value):
-        """Handle incoming HID input reports"""
+        """Handle incoming HID input reports and execute button scripts"""
         report_data = bytes(value)
         print(color(f">>> HID Report: {report_data.hex()}", 'magenta'))
 
-        if not self.uhid_device:
-            logging.error("Received HID report but uhid_device is None!")
+        # Button mapping with script execution is always enabled
+        if len(report_data) < 2:
             return
 
-        # Check if BLE-M3 specific processing is enabled
-        enable_ble_m3_logic = os.environ.get('KINDLE_BLE_HID_PATCH_DESCRIPTOR', '').lower() in ('1', 'true', 'yes')
+        # Extract report ID, button state, and movement
+        report_id = report_data[0]
+        button_state = report_data[1]
+        x_movement = report_data[2] if len(report_data) > 2 else 0
+        y_movement = report_data[3] if len(report_data) > 3 else 0
 
-        if enable_ble_m3_logic:
-            # LEGACY BLE-M3 specific processing with button mapping and debouncing
-            if len(report_data) < 2:
+        # Detect if any button is pressed (non-zero button state)
+        if button_state != 0:
+            # Debounce: ignore ANY button press within configured time (global across all report IDs)
+            current_time = time.time()
+            debounce_sec = self.button_executor.debounce_ms / 1000.0
+
+            if current_time - self.last_press_time < debounce_sec:
+                print(color(f"    Debounced (too soon)", 'blue'))
                 return
 
-            # Extract report ID, button state, and movement
-            report_id = report_data[0]
-            button_state = report_data[1]
-            x_movement = report_data[2] if len(report_data) > 2 else 0
-            y_movement = report_data[3] if len(report_data) > 3 else 0
+            # Map the button combination to a clean single button using movement direction
+            mapped_button, button_name = self._map_button_combination(button_state, x_movement, y_movement)
 
-            # Detect if any button is pressed (non-zero button state)
-            if button_state != 0:
-                # Debounce: ignore ANY button press within 500ms (global across all report IDs)
-                current_time = time.time()
+            if mapped_button is None:
+                print(color(f"    Unknown button combination: 0x{button_state:02x}", 'yellow'))
+                return
 
-                if current_time - self.last_press_time < 0.5:
-                    print(color(f"    Debounced (too soon)", 'blue'))
-                    return
+            print(color(f"    Detected: {button_name} (raw: 0x{button_state:02x}, x:{x_movement:02x}, y:{y_movement:02x})", 'cyan'))
 
-                # Map the button combination to a clean single button using movement direction
-                mapped_button, button_name = self._map_button_combination(button_state, x_movement, y_movement)
+            # Execute the script for this button
+            self.button_executor.execute_button_script(mapped_button, button_name)
 
-                if mapped_button is None:
-                    print(color(f"    Unknown button combination: 0x{button_state:02x}", 'yellow'))
-                    return
+            # Update global debounce timestamp
+            self.last_press_time = current_time
 
-                print(color(f"    Detected: {button_name} (raw: 0x{button_state:02x}, x:{x_movement:02x}, y:{y_movement:02x})", 'cyan'))
-
-                # Create clean button report with mapped button
-                clean_data = bytearray(report_data)
-                clean_data[1] = mapped_button  # Replace with clean single button
-
-                # Send the press event
-                translated_data = self._translate_report_id(bytes(clean_data))
-                self.uhid_device.send_input(translated_data)
-                print(color(f"    Sent clean button: 0x{mapped_button:02x}", 'green'))
-
-                # Immediately synthesize a release event (all buttons off)
-                release_data = bytearray(report_data)
-                release_data[1] = 0x00  # Clear all buttons
-                translated_release = self._translate_report_id(bytes(release_data))
-                self.uhid_device.send_input(translated_release)
-                print(color(f"    Auto-release sent", 'yellow'))
-
-                # Update global debounce timestamp
-                self.last_press_time = current_time
-        else:
-            # Pure pass-through mode: send reports as-is to UHID
-            print(color(f"    Pure pass-through mode: forwarding report unchanged", 'cyan'))
-            self.uhid_device.send_input(report_data)
-
-    def _translate_report_id(self, report_data):
-        """
-        Translate invalid report IDs (0, 7) to valid ones (5, 7).
-        HID doesn't allow report ID 0.
-        """
-        if len(report_data) < 1:
-            return report_data
-
-        report_id = report_data[0]
-
-        # Translate ID 0 -> 5 (0 is reserved in HID spec)
-        if report_id == 0x00:
-            print(color(f"    Translating report ID 0x00 -> 0x05", 'yellow'))
-            return bytes([0x05]) + report_data[1:]
-
-        return report_data
-
-    def _create_permissive_descriptor(self):
-        """
-        Create a permissive HID descriptor that accepts any report format.
-
-        This descriptor:
-        - Uses Mouse usage (gets recognized as input device)
-        - Declares Report IDs 0-15 with 63-byte payloads
-        - Pure pass-through: forwards any data unchanged
-        - Works with any BLE HID device regardless of descriptor mismatches
-        """
-        descriptor = bytes([
-            # Usage Page (Generic Desktop)
-            0x05, 0x01,
-
-            # Usage (Mouse)
-            0x09, 0x02,
-
-            # Collection (Application)
-            0xA1, 0x01,
-        ])
-
-        # Create 16 report IDs (IDs 0-15) with identical 63-byte payloads
-        # Each report declares mouse buttons + vendor data
-        for report_id in range(0, 16):
-            descriptor += bytes([
-                # Report ID (1-15, skip 0 as it's reserved)
-                0x85, report_id if report_id > 0 else 1,
-
-                # Usage Page (Button)
-                0x05, 0x09,
-
-                # Usage Minimum (Button 1)
-                0x19, 0x01,
-
-                # Usage Maximum (Button 8)
-                0x29, 0x08,
-
-                # Logical Minimum (0)
-                0x15, 0x00,
-
-                # Logical Maximum (1)
-                0x25, 0x01,
-
-                # Report Count (8 buttons)
-                0x95, 0x08,
-
-                # Report Size (1 bit per button)
-                0x75, 0x01,
-
-                # Input (Data, Variable, Absolute)
-                0x81, 0x02,
-
-                # Usage Page (Generic Desktop)
-                0x05, 0x01,
-
-                # Usage (X, Y, Wheel)
-                0x09, 0x30,  # X
-                0x09, 0x31,  # Y
-                0x09, 0x38,  # Wheel
-
-                # Logical Minimum (-127)
-                0x15, 0x81,
-
-                # Logical Maximum (127)
-                0x25, 0x7F,
-
-                # Report Count (3 axes)
-                0x95, 0x03,
-
-                # Report Size (8 bits)
-                0x75, 0x08,
-
-                # Input (Data, Variable, Relative)
-                0x81, 0x06,
-
-                # Padding: 59 bytes of vendor-specific data (63 total - 1 button byte - 3 axis bytes)
-                # Usage Page (Vendor Defined)
-                0x06, 0x00, 0xFF,
-
-                # Usage (Vendor Usage 1)
-                0x09, 0x01,
-
-                # Logical Minimum (0)
-                0x15, 0x00,
-
-                # Logical Maximum (255)
-                0x26, 0xFF, 0x00,
-
-                # Report Count (59 bytes)
-                0x95, 0x3B,
-
-                # Report Size (8 bits)
-                0x75, 0x08,
-
-                # Input (Data, Variable, Absolute)
-                0x81, 0x02,
-            ])
-
-        descriptor += bytes([
-            # End Collection
-            0xC0,
-        ])
-
-        print(color(f"    Using permissive Mouse descriptor (16 Report IDs, 63-byte payload each)", 'cyan'))
-        return descriptor
-
-    async def create_uhid_device(self, name: str = None):
-        """Create a virtual HID device using UHID
-
-        Args:
-            name: Optional name override. If not provided, uses self.device_name
-                  (from Generic Access Service), falling back to "BLE HID Device"
-        """
-        if not self.report_map:
-            print(color(">>> No report map available!", 'red'))
-            return False
-
-        # Use actual device name if available, otherwise fall back to provided name or default
-        if name is None:
-            if self.device_name:
-                name = self.device_name
-            else:
-                name = "BLE HID Device"
-
-        # Check mode: permissive (default) or original descriptor
-        use_original = os.environ.get('KINDLE_BLE_HID_USE_ORIGINAL_DESCRIPTOR', '').lower() in ('1', 'true', 'yes')
-
-        if use_original:
-            print(color(">>> Using original report descriptor from device", 'green'))
-            descriptor = self.report_map
-        else:
-            print(color(">>> Using permissive vendor-specific descriptor (default)", 'cyan'))
-            descriptor = self._create_permissive_descriptor()
-
-        # Use dummy VID/PID for now
-        vid = 0x0001
-        pid = 0x0001
-
-        print(color(f">>> Creating UHID device: {name}", 'cyan'))
-        self.uhid_device = UHIDDevice(name, vid, pid, descriptor)
-        return await self.uhid_device.create()
 
     async def run(self, target_address: str):
         """Main loop: connect, pair, discover HID, and receive reports"""
@@ -1086,11 +803,14 @@ class BLEHIDHost:
             if target_address:
                 await self.connect(target_address)
             else:
-                # Scan and let user select
-                devices = await self.scan(duration=10.0, filter_hid=True)
-                if not devices:
-                    print(color(">>> No HID devices found!", 'red'))
-                    return
+                # Scan continuously until devices are found
+                devices = []
+                while not devices:
+                    devices = await self.scan(duration=10.0, filter_hid=True)
+                    if not devices:
+                        print(color(">>> No HID devices found. Scanning again in 3 seconds...", 'yellow'))
+                        print(color(">>> (Make sure your device is in pairing mode. Press Ctrl+C to exit)", 'cyan'))
+                        await asyncio.sleep(3)
 
                 print("\nSelect device:")
                 for i, dev in enumerate(devices):
@@ -1115,10 +835,10 @@ class BLEHIDHost:
 
             # Discover HID service
             if await self.discover_hid_service():
-                # Create UHID device
-                await self.create_uhid_device()
+                # Subscribe to HID reports (no UHID device needed)
+                await self.subscribe_to_reports()
 
-                print(color("\n>>> Receiving HID reports. Press Ctrl+C to exit.", 'green'))
+                print(color("\n>>> Receiving HID reports and executing button scripts. Press Ctrl+C to exit.", 'green'))
 
                 # Wait for disconnection or interrupt
                 await self.transport.source.wait_for_termination()
@@ -1133,8 +853,6 @@ class BLEHIDHost:
 
     async def cleanup(self):
         """Clean up resources"""
-        if self.uhid_device:
-            self.uhid_device.destroy()
         if self.connection:
             try:
                 await self.connection.disconnect()

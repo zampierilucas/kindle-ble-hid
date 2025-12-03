@@ -14,6 +14,7 @@ deploy:
     ssh kindle "/usr/sbin/mntroot rw && mount -o remount,rw /mnt/base-us"
     @echo "Copying files..."
     scp bumble_ble_hid/*.py kindle:/mnt/us/bumble_ble_hid/
+    scp bumble_ble_hid/button_config.json kindle:/mnt/us/bumble_ble_hid/
     scp bumble_ble_hid/ble-hid.init kindle:/etc/init.d/ble-hid
     ssh kindle "chmod +x /etc/init.d/ble-hid"
     @echo "Clearing Python bytecode cache..."

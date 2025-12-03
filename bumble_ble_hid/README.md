@@ -77,11 +77,36 @@ tail -f /var/log/ble_hid_daemon.log
 - Handles broken devices with mismatched Report IDs (like cheap Chinese remotes)
 - No Report ID validation or device-specific mapping
 
-To use device's original descriptor instead (may fail with broken devices):
+### HID Descriptor Modes
+
+The implementation **automatically detects** device type (mouse/keyboard) from the HID Information characteristic and selects the appropriate standard USB HID descriptor. No configuration needed!
+
 ```bash
-export KINDLE_BLE_HID_USE_ORIGINAL_DESCRIPTOR=1
+# Auto-detection (default) - reads device type and picks standard descriptor
 ./kindle_ble_hid.sh
 ```
+
+You can override auto-detection with environment variables:
+
+```bash
+# Force standard USB HID mouse descriptor (3-byte report: buttons, x, y)
+export KINDLE_BLE_HID_DESCRIPTOR_MODE=standard_mouse
+./kindle_ble_hid.sh
+
+# Force standard USB HID keyboard descriptor (8-byte report: modifiers + keys)
+export KINDLE_BLE_HID_DESCRIPTOR_MODE=standard_keyboard
+./kindle_ble_hid.sh
+
+# Use device's original descriptor (may fail with broken devices)
+export KINDLE_BLE_HID_DESCRIPTOR_MODE=original
+./kindle_ble_hid.sh
+
+# Use permissive 16-report-ID descriptor (for unrecognized device types)
+export KINDLE_BLE_HID_DESCRIPTOR_MODE=permissive
+./kindle_ble_hid.sh
+```
+
+**How it works**: The code reads the HID Information characteristic's Flags byte to detect device type (0x01=keyboard, 0x02=mouse), then automatically selects the appropriate standard USB HID descriptor based on USB HID 1.11 specification (proven working in btferret).
 
 ## Files
 

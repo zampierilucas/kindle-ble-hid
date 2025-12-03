@@ -1,0 +1,12 @@
+{
+  "buttons": {
+    "0x01": "/mnt/us/PageTurnerLocal/prev.sh",
+    "0x02": "/mnt/us/PageTurnerLocal/brightnessUp.sh",
+    "0x04": "/mnt/us/PageTurnerLocal/next.sh",
+    "0x08": "/mnt/us/PageTurnerLocal/brightnessDown.sh",
+    "0x10": "/mnt/us/PageTurnerLocal/tapBar.sh",
+    "0x20": "/mnt/us/PageTurnerLocal/tapBar.sh"
+  },
+  "debounce_ms": 500,
+  "log_button_presses": true
+}
