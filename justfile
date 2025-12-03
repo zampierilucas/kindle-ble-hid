@@ -20,10 +20,11 @@ deploy:
     ssh kindle "rm -rf /mnt/us/bumble_ble_hid/__pycache__"
     @echo "Creating cache directory..."
     ssh kindle "mkdir -p /mnt/us/bumble_ble_hid/cache"
-    @echo "Starting daemon..."
-    ssh kindle "/etc/init.d/ble-hid start"
+    # @echo "Starting daemon..."
+    # ssh kindle "/etc/init.d/ble-hid start"
     @echo "Deployment complete!"
     @echo ""
+    @echo "Start daemon with: just start"
     @echo "Check status with: just status"
     @echo "View logs with: just logs"
 

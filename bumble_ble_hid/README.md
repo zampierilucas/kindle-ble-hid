@@ -70,10 +70,18 @@ tail -f /var/log/ble_hid_daemon.log
 - **Idle mode** (no input for 60s): 30 second retry
 - Connection timeout: 10 seconds
 
-### Pure Pass-Through
+### Pure Pass-Through with Permissive Mode (Default)
+- **Permissive vendor-specific HID descriptor** - accepts any report format without validation
 - HID reports forwarded unchanged to UHID
-- Works with keyboards, mice, gamepads, etc.
-- No device-specific mapping in BLE stack
+- Works with any BLE HID device: keyboards, mice, gamepads, remotes, etc.
+- Handles broken devices with mismatched Report IDs (like cheap Chinese remotes)
+- No Report ID validation or device-specific mapping
+
+To use device's original descriptor instead (may fail with broken devices):
+```bash
+export KINDLE_BLE_HID_USE_ORIGINAL_DESCRIPTOR=1
+./kindle_ble_hid.sh
+```
 
 ## Files
 

@@ -622,28 +622,34 @@ class BLEHIDHost:
                         # Invalid format, skip this cache
                         raise ValueError(f"Invalid UUID format in cache: {uuid_str}")
 
-                    # Create a mock characteristic with the cached data
-                    # We need to provide get_descriptor method for Bumble's subscribe()
-                    def make_get_descriptor(handle):
-                        def get_descriptor(self, uuid):
-                            # Look for CCCD (Client Characteristic Configuration Descriptor)
-                            if uuid == GATT_CCCD:
-                                # Return a mock descriptor with the CCCD handle (handle + 1 by convention)
-                                return type('CachedDescriptor', (), {
-                                    'type': uuid,
-                                    'handle': handle + 1
-                                })()
-                            return None
-                        return get_descriptor
+                    # Create a proper Bumble Characteristic with CCCD descriptor pre-populated
+                    # This avoids slow descriptor discovery while maintaining notification routing
+                    from bumble.gatt import Characteristic, Descriptor
 
-                    char = type('CachedCharacteristic', (), {
-                        'uuid': UUID(uuid_str),
-                        'handle': char_data['handle'],
-                        'properties': char_data.get('properties', 0),
-                        'descriptors': [],
-                        'descriptors_discovered': True,
-                        'get_descriptor': make_get_descriptor(char_data['handle'])
-                    })()
+                    # Create the characteristic
+                    char = Characteristic(
+                        uuid=UUID(uuid_str),
+                        properties=char_data.get('properties', 0),
+                        permissions=0,  # Will be set by server if needed
+                        value=b''  # Empty value for notifications
+                    )
+                    char.handle = char_data['handle']
+                    char.end_group_handle = char_data['handle'] + 2  # Char + CCCD + padding
+                    char.service = hid_service  # Link to parent service
+
+                    # Create CCCD descriptor at handle+1 (standard BLE convention)
+                    # This is what enables notifications without discovery
+                    cccd = Descriptor(
+                        attribute_type=GATT_CCCD,
+                        permissions=0,
+                        value=b'\x00\x00'  # Default: notifications disabled
+                    )
+                    cccd.handle = char_data['handle'] + 1
+                    cccd.characteristic = char  # Link descriptor to characteristic
+
+                    # Attach descriptor to characteristic and mark as discovered
+                    char.descriptors = [cccd]
+                    char.descriptors_discovered = True  # Skip descriptor discovery
                     cached_chars.append(char)
 
                 # Replace service characteristics with cached ones
@@ -787,17 +793,14 @@ class BLEHIDHost:
         return True
 
     async def subscribe_to_reports(self):
-        """Subscribe to HID input report notifications in parallel"""
-        async def subscribe_single(report_id, char):
+        """Subscribe to HID input report notifications serially"""
+        # Subscribe to all reports serially to test timing behavior
+        for report_id, char in self.hid_reports.items():
             try:
                 await self.peer.subscribe(char, self._on_hid_report)
                 print(color(f">>> Subscribed to input report {report_id}", 'green'))
             except Exception as e:
                 print(color(f">>> Failed to subscribe to report {report_id}: {e}", 'yellow'))
-
-        # Subscribe to all reports in parallel for faster startup
-        tasks = [subscribe_single(report_id, char) for report_id, char in self.hid_reports.items()]
-        await asyncio.gather(*tasks, return_exceptions=True)
 
     def _map_button_combination(self, button_state, x_movement=0, y_movement=0):
         """
@@ -933,62 +936,111 @@ class BLEHIDHost:
 
         return report_data
 
-    def _patch_report_descriptor(self, original_descriptor):
+    def _create_permissive_descriptor(self):
         """
-        Patch report descriptor to add button reports for IDs 5 and 7.
-        ID 5: translated from device's invalid ID 0
-        ID 7: device sends this directly
+        Create a permissive HID descriptor that accepts any report format.
+
+        This descriptor:
+        - Uses Mouse usage (gets recognized as input device)
+        - Declares Report IDs 0-15 with 63-byte payloads
+        - Pure pass-through: forwards any data unchanged
+        - Works with any BLE HID device regardless of descriptor mismatches
         """
-        # Mouse-style button descriptor for Report ID 5 (translated from 0)
-        # Use mouse buttons which have better kernel support
-        report_id_5 = bytes([
-            0x85, 0x05,        # Report ID (5)
-            0x05, 0x09,        # Usage Page (Button)
-            0x19, 0x01,        # Usage Minimum (Button 1)
-            0x29, 0x10,        # Usage Maximum (Button 16) - wider range
-            0x15, 0x00,        # Logical Minimum (0)
-            0x25, 0x01,        # Logical Maximum (1)
-            0x95, 0x10,        # Report Count (16 bits)
-            0x75, 0x01,        # Report Size (1 bit)
-            0x81, 0x02,        # Input (Data, Variable, Absolute)
-            # Padding for rest of report (3 bytes remaining)
-            0x95, 0x18,        # Report Count (24 bits = 3 bytes)
-            0x75, 0x01,        # Report Size (1 bit)
-            0x81, 0x01,        # Input (Constant)
+        descriptor = bytes([
+            # Usage Page (Generic Desktop)
+            0x05, 0x01,
+
+            # Usage (Mouse)
+            0x09, 0x02,
+
+            # Collection (Application)
+            0xA1, 0x01,
         ])
 
-        # Same for Report ID 7
-        report_id_7 = bytes([
-            0x85, 0x07,        # Report ID (7)
-            0x05, 0x09,        # Usage Page (Button)
-            0x19, 0x01,        # Usage Minimum (Button 1)
-            0x29, 0x10,        # Usage Maximum (Button 16)
-            0x15, 0x00,        # Logical Minimum (0)
-            0x25, 0x01,        # Logical Maximum (1)
-            0x95, 0x10,        # Report Count (16 bits)
-            0x75, 0x01,        # Report Size (1 bit)
-            0x81, 0x02,        # Input (Data, Variable, Absolute)
-            # Padding
-            0x95, 0x18,        # Report Count (24 bits)
-            0x75, 0x01,        # Report Size (1 bit)
-            0x81, 0x01,        # Input (Constant)
+        # Create 16 report IDs (IDs 0-15) with identical 63-byte payloads
+        # Each report declares mouse buttons + vendor data
+        for report_id in range(0, 16):
+            descriptor += bytes([
+                # Report ID (1-15, skip 0 as it's reserved)
+                0x85, report_id if report_id > 0 else 1,
+
+                # Usage Page (Button)
+                0x05, 0x09,
+
+                # Usage Minimum (Button 1)
+                0x19, 0x01,
+
+                # Usage Maximum (Button 8)
+                0x29, 0x08,
+
+                # Logical Minimum (0)
+                0x15, 0x00,
+
+                # Logical Maximum (1)
+                0x25, 0x01,
+
+                # Report Count (8 buttons)
+                0x95, 0x08,
+
+                # Report Size (1 bit per button)
+                0x75, 0x01,
+
+                # Input (Data, Variable, Absolute)
+                0x81, 0x02,
+
+                # Usage Page (Generic Desktop)
+                0x05, 0x01,
+
+                # Usage (X, Y, Wheel)
+                0x09, 0x30,  # X
+                0x09, 0x31,  # Y
+                0x09, 0x38,  # Wheel
+
+                # Logical Minimum (-127)
+                0x15, 0x81,
+
+                # Logical Maximum (127)
+                0x25, 0x7F,
+
+                # Report Count (3 axes)
+                0x95, 0x03,
+
+                # Report Size (8 bits)
+                0x75, 0x08,
+
+                # Input (Data, Variable, Relative)
+                0x81, 0x06,
+
+                # Padding: 59 bytes of vendor-specific data (63 total - 1 button byte - 3 axis bytes)
+                # Usage Page (Vendor Defined)
+                0x06, 0x00, 0xFF,
+
+                # Usage (Vendor Usage 1)
+                0x09, 0x01,
+
+                # Logical Minimum (0)
+                0x15, 0x00,
+
+                # Logical Maximum (255)
+                0x26, 0xFF, 0x00,
+
+                # Report Count (59 bytes)
+                0x95, 0x3B,
+
+                # Report Size (8 bits)
+                0x75, 0x08,
+
+                # Input (Data, Variable, Absolute)
+                0x81, 0x02,
+            ])
+
+        descriptor += bytes([
+            # End Collection
+            0xC0,
         ])
 
-        # Wrap in application collection
-        patched = bytes([
-            0x05, 0x01,        # Usage Page (Generic Desktop)
-            0x09, 0x02,        # Usage (Mouse) - better button support
-            0xA1, 0x01,        # Collection (Application)
-        ])
-        patched += report_id_5
-        patched += report_id_7
-        patched += bytes([0xC0])  # End Collection
-
-        # Append original descriptor
-        patched += original_descriptor
-
-        print(color(f"    Patched descriptor: {len(original_descriptor)} -> {len(patched)} bytes", 'cyan'))
-        return patched
+        print(color(f"    Using permissive Mouse descriptor (16 Report IDs, 63-byte payload each)", 'cyan'))
+        return descriptor
 
     async def create_uhid_device(self, name: str = None):
         """Create a virtual HID device using UHID
@@ -1008,15 +1060,15 @@ class BLEHIDHost:
             else:
                 name = "BLE HID Device"
 
-        # Check if descriptor patching is enabled via environment variable
-        enable_patching = os.environ.get('KINDLE_BLE_HID_PATCH_DESCRIPTOR', '').lower() in ('1', 'true', 'yes')
+        # Check mode: permissive (default) or original descriptor
+        use_original = os.environ.get('KINDLE_BLE_HID_USE_ORIGINAL_DESCRIPTOR', '').lower() in ('1', 'true', 'yes')
 
-        if enable_patching:
-            print(color(">>> Patching report descriptor (KINDLE_BLE_HID_PATCH_DESCRIPTOR enabled)", 'yellow'))
-            descriptor = self._patch_report_descriptor(self.report_map)
-        else:
-            print(color(">>> Using original report descriptor (pure pass-through)", 'green'))
+        if use_original:
+            print(color(">>> Using original report descriptor from device", 'green'))
             descriptor = self.report_map
+        else:
+            print(color(">>> Using permissive vendor-specific descriptor (default)", 'cyan'))
+            descriptor = self._create_permissive_descriptor()
 
         # Use dummy VID/PID for now
         vid = 0x0001
