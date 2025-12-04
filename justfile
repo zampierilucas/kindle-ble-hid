@@ -17,6 +17,10 @@ deploy:
     scp bumble_ble_hid/button_config.json kindle:/mnt/us/bumble_ble_hid/
     scp bumble_ble_hid/ble-hid.init kindle:/etc/init.d/ble-hid
     ssh kindle "chmod +x /etc/init.d/ble-hid"
+    @echo "Copying Scripts folder..."
+    ssh kindle "mkdir -p /mnt/us/bumble_ble_hid/Scripts"
+    scp bumble_ble_hid/Scripts/*.sh kindle:/mnt/us/bumble_ble_hid/Scripts/
+    ssh kindle "chmod +x /mnt/us/bumble_ble_hid/Scripts/*.sh"
     @echo "Clearing Python bytecode cache..."
     ssh kindle "rm -rf /mnt/us/bumble_ble_hid/__pycache__"
     @echo "Creating cache directory..."

@@ -11,7 +11,7 @@ Format: Single device address (first non-comment line)
 Author: Lucas Zampieri <lzampier@redhat.com>
 """
 
-__version__ = "1.4.0"  # Simplified single-device daemon
+__version__ = "1.5.0"  # Added connection cycle timeout for sleep recovery
 
 import asyncio
 import logging
@@ -26,6 +26,7 @@ from kindle_ble_hid import BLEHIDHost
 DEVICES_CONFIG = '/mnt/us/bumble_ble_hid/devices.conf'
 TRANSPORT = 'file:/dev/stpbt'
 RECONNECT_DELAY = 5  # seconds between reconnection attempts
+CONNECTION_CYCLE_TIMEOUT = 90  # max seconds for entire connection cycle (catches BT sleep hangs)
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +38,7 @@ class BLEHIDDaemon:
         self.device_address = None
         self.running = False
         self.host = None
+        self.consecutive_timeouts = 0  # Track consecutive cycle timeouts
 
     def load_device(self):
         """Load device address from config file"""
@@ -75,12 +77,29 @@ class BLEHIDDaemon:
                 self.host = BLEHIDHost(TRANSPORT)
 
                 logger.info("Connecting to device...")
-                await self.host.run(self.device_address)
+                # Wrap entire connection cycle with timeout to catch BT hardware sleep hangs
+                # When Kindle sleeps, BT hardware may also sleep and not respond to HCI commands
+                await asyncio.wait_for(
+                    self.host.run(self.device_address),
+                    timeout=CONNECTION_CYCLE_TIMEOUT
+                )
                 logger.info("host.run() returned")
 
                 # If we get here, the connection ended normally (disconnect)
                 logger.info("Connection ended, will reconnect")
+                self.consecutive_timeouts = 0  # Reset on successful cycle
 
+            except asyncio.TimeoutError:
+                self.consecutive_timeouts += 1
+                logger.warning(f"Connection cycle timed out after {CONNECTION_CYCLE_TIMEOUT}s "
+                              f"(consecutive: {self.consecutive_timeouts})")
+                logger.warning("BT hardware may be asleep - forcing transport cleanup")
+                # Force cleanup will close /dev/stpbt, which should reset the BT state
+                await self._force_cleanup()
+                # Longer delay after timeout to give hardware time to recover
+                if self.consecutive_timeouts >= 3:
+                    logger.warning("Multiple consecutive timeouts - waiting longer for BT recovery")
+                    await asyncio.sleep(RECONNECT_DELAY * 2)
             except KeyboardInterrupt:
                 logger.info("Received interrupt signal")
                 break
@@ -94,6 +113,7 @@ class BLEHIDDaemon:
             except Exception as e:
                 logger.error(f"Error in connection: {e}")
                 logger.exception("Connection error details")
+                self.consecutive_timeouts = 0  # Reset on non-timeout errors
 
             # Clean up host
             if self.host:
@@ -115,6 +135,36 @@ class BLEHIDDaemon:
 
         logger.info("Daemon stopped")
 
+    async def _force_cleanup(self):
+        """Force cleanup of host and transport, with timeout protection.
+
+        This is used when the BT hardware may be unresponsive (e.g., after sleep).
+        We use short timeouts since the hardware may not respond at all.
+        """
+        if not self.host:
+            return
+
+        logger.info("Force cleanup: closing transport...")
+
+        # Try graceful cleanup first with short timeout
+        try:
+            await asyncio.wait_for(self.host.cleanup(), timeout=5.0)
+            logger.info("Force cleanup: graceful cleanup succeeded")
+        except asyncio.TimeoutError:
+            logger.warning("Force cleanup: graceful cleanup timed out, forcing close")
+            # Force close the transport if it exists
+            if hasattr(self.host, 'transport') and self.host.transport:
+                try:
+                    # Close the underlying transport directly
+                    await asyncio.wait_for(self.host.transport.close(), timeout=2.0)
+                except Exception as e:
+                    logger.warning(f"Force cleanup: transport close error: {e}")
+        except Exception as e:
+            logger.warning(f"Force cleanup: error during cleanup: {e}")
+
+        self.host = None
+        logger.info("Force cleanup: complete")
+
     async def stop(self):
         """Stop the daemon"""
         logger.info("Stopping daemon...")
@@ -122,7 +172,9 @@ class BLEHIDDaemon:
 
         if self.host:
             try:
-                await self.host.cleanup()
+                await asyncio.wait_for(self.host.cleanup(), timeout=10.0)
+            except asyncio.TimeoutError:
+                logger.warning("Stop: cleanup timed out")
             except Exception as e:
                 logger.error(f"Error cleaning up host: {e}")
 

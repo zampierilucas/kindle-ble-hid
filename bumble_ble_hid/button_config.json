@@ -1,11 +1,11 @@
 {
   "buttons": {
-    "0x01": "/mnt/us/PageTurnerLocal/prev.sh",
-    "0x02": "/mnt/us/PageTurnerLocal/brightnessUp.sh",
-    "0x04": "/mnt/us/PageTurnerLocal/next.sh",
-    "0x08": "/mnt/us/PageTurnerLocal/brightnessDown.sh",
-    "0x10": "/mnt/us/PageTurnerLocal/tapBar.sh",
-    "0x20": "/mnt/us/PageTurnerLocal/tapBar.sh"
+    "0x01": "/mnt/us/bumble_ble_hid/Scripts/prevPage.sh",
+    "0x02": "/mnt/us/bumble_ble_hid/Scripts/brightnessUp.sh",
+    "0x04": "/mnt/us/bumble_ble_hid/Scripts/nextPage.sh",
+    "0x08": "/mnt/us/bumble_ble_hid/Scripts/brightnessDown.sh",
+    "0x10": "/mnt/us/bumble_ble_hid/Scripts/tapBar.sh",
+    "0x20": "/mnt/us/bumble_ble_hid/Scripts/tapBar.sh"
   },
   "debounce_ms": 600,
   "log_button_presses": true

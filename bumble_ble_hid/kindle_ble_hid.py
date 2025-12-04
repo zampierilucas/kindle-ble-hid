@@ -13,7 +13,7 @@ Author: Lucas Zampieri <lzampier@redhat.com>
 Date: December 2025
 """
 
-__version__ = "1.3.0"  # Cached GATT characteristics to skip 10s discovery
+__version__ = "1.4.0"  # Added HCI Reset on transport open for sleep recovery
 
 import asyncio
 import argparse
@@ -24,7 +24,7 @@ import subprocess
 import time
 
 from bumble.device import Device, Peer
-from bumble.hci import Address
+from bumble.hci import Address, HCI_Reset_Command
 from bumble.gatt import (
     GATT_GENERIC_ACCESS_SERVICE,
     GATT_DEVICE_NAME_CHARACTERISTIC,
@@ -64,6 +64,9 @@ PAIRING_KEYS_FILE = '/mnt/us/bumble_ble_hid/cache/pairing_keys.json'
 
 # Button configuration file
 BUTTON_CONFIG_FILE = '/mnt/us/bumble_ble_hid/button_config.json'
+
+# Reading end script (run on disconnection)
+READING_END_SCRIPT = '/mnt/us/bumble_ble_hid/Scripts/readingEnd.sh'
 
 # Timestamp tracker for performance debugging
 _last_timestamp = None
@@ -213,11 +216,24 @@ class BLEHIDHost:
         self.current_device_address = None  # Track connected device for cache
         self.device_name = None  # BLE device name from Generic Access Service
 
-    async def start(self):
-        """Initialize the Bumble device"""
+    async def start(self, transport_timeout: int = 30, hci_reset_timeout: int = 10):
+        """Initialize the Bumble device.
+
+        Args:
+            transport_timeout: Timeout for opening the transport (default 30s)
+            hci_reset_timeout: Timeout for HCI Reset command (default 10s)
+                              If BT hardware is asleep, this will timeout and raise.
+        """
         print(color(f">>> Kindle BLE HID Host v{__version__}", 'cyan'))
         print(color(">>> Opening transport...", 'blue'))
-        self.transport = await open_transport(self.transport_spec)
+        try:
+            self.transport = await asyncio.wait_for(
+                open_transport(self.transport_spec),
+                timeout=transport_timeout
+            )
+        except asyncio.TimeoutError:
+            print(color(f">>> Transport open timed out after {transport_timeout}s", 'red'))
+            raise
 
         # Set up persistent key store for bonding
         key_store = JsonKeyStore(namespace=None, filename=PAIRING_KEYS_FILE)
@@ -246,6 +262,20 @@ class BLEHIDHost:
             bonding=True,  # Enable bonding
             delegate=SimplePairingDelegate(),
         )
+
+        # Send HCI Reset to ensure clean hardware state
+        # This is critical after Kindle wakes from sleep - the BT hardware may be
+        # in an inconsistent state. If this times out, the hardware is likely asleep.
+        print(color(">>> Sending HCI Reset...", 'blue'))
+        try:
+            await asyncio.wait_for(
+                self.device.host.send_command(HCI_Reset_Command()),
+                timeout=hci_reset_timeout
+            )
+            print(color(">>> HCI Reset successful", 'green'))
+        except asyncio.TimeoutError:
+            print(color(f">>> HCI Reset timed out after {hci_reset_timeout}s - BT hardware may be asleep", 'red'))
+            raise
 
         await self.device.power_on()
         print(color(f">>> Device powered on: {self.device.public_address}", 'green'))
@@ -344,6 +374,25 @@ class BLEHIDHost:
 
     def _on_disconnection(self, reason):
         print(color(f">>> Disconnected: reason={reason}", 'red'))
+        self._run_reading_end_script()
+
+    def _run_reading_end_script(self):
+        """Execute the reading end script on disconnection"""
+        if not os.path.exists(READING_END_SCRIPT):
+            print(color(f">>> Reading end script not found: {READING_END_SCRIPT}", 'yellow'))
+            return
+
+        try:
+            print(color(f">>> Executing reading end script: {READING_END_SCRIPT}", 'cyan'))
+            subprocess.Popen(
+                [READING_END_SCRIPT],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                start_new_session=True
+            )
+            print(color(">>> Reading end script launched", 'green'))
+        except Exception as e:
+            print(color(f">>> Failed to execute reading end script: {e}", 'red'))
 
     def _on_pairing(self, keys):
         print(color(">>> Pairing successful!", 'green'))

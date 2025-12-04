@@ -25,7 +25,7 @@ MediaTek MT8512 → /dev/stpbt → Bumble (Python) → /dev/uhid → Linux Input
 
 The Kindle's kernel has a bug preventing BLE HID pairing through the standard Linux Bluetooth stack. Bumble implements the entire Bluetooth stack in Python, bypassing this limitation.
 
-See `BLE_SMP_LIMITATION.md` for technical details.
+See `docs/BLE_SMP_LIMITATION.md` for technical details.
 
 ## Components
 
@@ -56,15 +56,28 @@ See `kindle_system_info.md` for complete system details.
 kindle/
 ├── README.md                   # This file
 ├── QUICK_START.md              # User guide
-├── BLE_SMP_LIMITATION.md       # Technical background
+├── justfile                    # Deployment and management recipes
 ├── kindle_system_info.md       # Hardware reference
 │
 ├── bumble_ble_hid/             # BLE HID implementation
 │   ├── README.md               # Implementation details
 │   ├── USAGE.md                # Usage guide
+│   ├── SCRIPT_MODE_README.md   # Button script configuration
 │   ├── kindle_ble_hid.py       # Main implementation
 │   ├── ble_hid_daemon.py       # Persistent daemon
-│   └── docs/archive/           # Historical documentation
+│   ├── button_config.json      # Button-to-script mapping
+│   ├── devices.conf.example    # Device addresses config
+│   └── ble-hid.init            # Init script template
 │
-└── docs/archive/               # Historical documentation
+├── Scripts/                    # Shell scripts for button actions
+│   ├── brightnessUp.sh
+│   ├── brightnessDown.sh
+│   ├── nextPage.sh
+│   └── prevPage.sh
+│
+├── docs/
+│   └── BLE_SMP_LIMITATION.md   # Technical background
+│
+└── test/                       # Test suite
+    └── test_logic_only.py
 ```
