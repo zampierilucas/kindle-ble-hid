@@ -21,7 +21,6 @@ import json
 import logging
 import os
 import subprocess
-import sys
 import time
 
 from bumble.device import Device, Peer
@@ -29,6 +28,8 @@ from bumble.hci import Address
 from bumble.gatt import (
     GATT_GENERIC_ACCESS_SERVICE,
     GATT_DEVICE_NAME_CHARACTERISTIC,
+    Characteristic,
+    Descriptor,
 )
 from bumble.pairing import PairingConfig, PairingDelegate
 from bumble.keys import JsonKeyStore
@@ -326,7 +327,9 @@ class BLEHIDHost:
                 timeout=timeout
             )
         except asyncio.TimeoutError:
-            raise TimeoutError(f"Connection timeout after {timeout}s. Is the device powered on and advertising?")
+            # Connection timeout is not an error - device might be off
+            print(color(f">>> Connection timeout after {timeout}s (device may be off or out of range)", 'yellow'))
+            return False
 
         self.peer = Peer(self.connection)
 
@@ -337,7 +340,7 @@ class BLEHIDHost:
         self.connection.on('pairing', self._on_pairing)
         self.connection.on('pairing_failure', self._on_pairing_failure)
 
-        return self.connection
+        return True
 
     def _on_disconnection(self, reason):
         print(color(f">>> Disconnected: reason={reason}", 'red'))
@@ -500,7 +503,6 @@ class BLEHIDHost:
             print(color(">>> Loading characteristics from cache...", 'cyan'))
             try:
                 # Reconstruct characteristics from cache
-                from bumble.gatt import Characteristic
                 cached_chars = []
                 for char_data in cache['characteristics']:
                     # Parse UUID - handle both short form ("2A4B") and full form
@@ -515,7 +517,6 @@ class BLEHIDHost:
 
                     # Create a proper Bumble Characteristic with CCCD descriptor pre-populated
                     # This avoids slow descriptor discovery while maintaining notification routing
-                    from bumble.gatt import Characteristic, Descriptor
 
                     # Create the characteristic
                     char = Characteristic(
@@ -726,6 +727,10 @@ class BLEHIDHost:
         if button_state == 0x96:
             return (0x01, "Button 1 (Left)")
 
+        # 0xc6 pattern - also LEFT (release or alternate state)
+        if button_state == 0xc6:
+            return (0x01, "Button 1 (Left)")
+
         # 0x2c pattern - this is CENTER/SELECT button
         if button_state == 0x2c:
             return (0x10, "Button 5 (Center)")
@@ -742,8 +747,8 @@ class BLEHIDHost:
                 return (0x08, "Button 4 (Down)")
 
             # Up: significant negative Y movement (need strong negative signal)
-            # Small negative values like -12 (0xF4) are considered noise from DOWN button
-            if y_signed < -20:
+            # Threshold lowered to -15 to catch initial UP press (was -20)
+            if y_signed < -15:
                 # UP has x=0x00 (no X movement)
                 # RIGHT has small positive x (like 0x01)
                 if x_movement == 0x00:
@@ -751,9 +756,8 @@ class BLEHIDHost:
                 else:
                     return (0x04, "Button 3 (Right)")
 
-            # If Y is between -15 and +15, it's likely noise - default to DOWN
-            # since the button is physically pressed
-            return (0x08, "Button 4 (Down)")
+            # Weak signals (y between -15 and +15) - ignore as noise/release events
+            return (None, None)
 
         # Right button sometimes sends 0xFA
         if button_state == 0xFA:
@@ -818,7 +822,10 @@ class BLEHIDHost:
             await self.start()
 
             if target_address:
-                await self.connect(target_address)
+                connected = await self.connect(target_address)
+                if not connected:
+                    # Connection failed (timeout) - return to let daemon retry
+                    return
             else:
                 # Scan continuously until devices are found
                 devices = []
@@ -845,7 +852,10 @@ class BLEHIDHost:
                     print("Invalid input")
                     return
 
-                await self.connect(target_address)
+                connected = await self.connect(target_address)
+                if not connected:
+                    # Connection failed (timeout) - return to let daemon retry
+                    return
 
             # Replace the disconnection handler with our wrapper
             self.connection.on('disconnection', on_disconnection_wrapper)

@@ -9,6 +9,7 @@ Author: Lucas Zampieri <lzampier@redhat.com>
 """
 
 import os
+import select
 import time
 import subprocess
 import logging
@@ -353,8 +354,6 @@ def example_integration():
     """
     Example of how to integrate with ble_hid_daemon.py
     """
-    import select
-
     # Initialize power monitor
     power_monitor = KindlePowerMonitor(
         idle_threshold=60.0,      # 60s idle

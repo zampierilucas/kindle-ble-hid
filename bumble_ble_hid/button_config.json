@@ -7,6 +7,6 @@
     "0x10": "/mnt/us/PageTurnerLocal/tapBar.sh",
     "0x20": "/mnt/us/PageTurnerLocal/tapBar.sh"
   },
-  "debounce_ms": 500,
+  "debounce_ms": 600,
   "log_button_presses": true
 }
