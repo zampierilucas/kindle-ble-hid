@@ -7,7 +7,7 @@ This implements a BLE HID host that:
 2. Scans for and connects to BLE HID devices
 3. Handles SMP pairing (bypassing kernel SMP bug)
 4. Parses HID over GATT (HOGP) reports
-5. Injects input events via /dev/uhid
+5. Executes shell scripts based on button presses
 
 Author: Lucas Zampieri <lzampier@redhat.com>
 Date: December 2025
@@ -20,7 +20,6 @@ import argparse
 import json
 import logging
 import os
-import struct
 import subprocess
 import sys
 import time
@@ -43,26 +42,15 @@ from bumble.colors import color
 GATT_HID_SERVICE = UUID.from_16_bits(0x1812)
 GATT_HID_INFORMATION_CHARACTERISTIC = UUID.from_16_bits(0x2A4A)
 GATT_HID_REPORT_MAP_CHARACTERISTIC = UUID.from_16_bits(0x2A4B)
-GATT_HID_CONTROL_POINT_CHARACTERISTIC = UUID.from_16_bits(0x2A4C)
 GATT_HID_REPORT_CHARACTERISTIC = UUID.from_16_bits(0x2A4D)
-GATT_HID_PROTOCOL_MODE_CHARACTERISTIC = UUID.from_16_bits(0x2A4E)
 
 # Report Reference Descriptor
 GATT_REPORT_REFERENCE_DESCRIPTOR = UUID.from_16_bits(0x2908)
 # Client Characteristic Configuration Descriptor
 GATT_CCCD = UUID.from_16_bits(0x2902)
 
-# Battery Service
-GATT_BATTERY_SERVICE = UUID.from_16_bits(0x180F)
-GATT_BATTERY_LEVEL_CHARACTERISTIC = UUID.from_16_bits(0x2A19)
-
-# Device Information Service
-GATT_DEVICE_INFORMATION_SERVICE = UUID.from_16_bits(0x180A)
-
 # HID Report Types
 HID_REPORT_TYPE_INPUT = 1
-HID_REPORT_TYPE_OUTPUT = 2
-HID_REPORT_TYPE_FEATURE = 3
 
 # -----------------------------------------------------------------------------
 # Configuration paths
@@ -218,12 +206,11 @@ class BLEHIDHost:
         self.peer = None
         self.button_executor = ButtonScriptExecutor()
         self.hid_reports = {}  # report_id -> characteristic
-        self.report_map = None
+        self.report_map = None  # HID report map (cached for debugging)
         self.last_button_state = {}  # report_id -> button_state (to detect changes)
         self.last_press_time = 0  # Global timestamp for debouncing (across all report IDs)
         self.current_device_address = None  # Track connected device for cache
         self.device_name = None  # BLE device name from Generic Access Service
-        self.device_type = None  # HID device type from HID Information (mouse=0x02, keyboard=0x01)
 
     async def start(self):
         """Initialize the Bumble device"""
@@ -375,9 +362,28 @@ class BLEHIDHost:
                 if keys:
                     print(color(f">>> Using cached bonding keys for {peer_address}", 'cyan'))
                     # Request encryption (will use cached keys)
-                    await self.connection.encrypt()
-                    print(color(">>> Bonding restored!", 'green'))
-                    return True
+                    try:
+                        await self.connection.encrypt()
+                        print(color(">>> Bonding restored!", 'green'))
+                        return True
+                    except asyncio.CancelledError:
+                        # Connection was terminated during encryption - likely bad cached keys
+                        print(color(f">>> Cached keys rejected by device (disconnected), clearing cache", 'yellow'))
+                        # Delete bad keys
+                        try:
+                            await self.device.keystore.delete(str(peer_address))
+                        except:
+                            pass
+                        # Return False since connection is gone
+                        return False
+                    except Exception as enc_err:
+                        print(color(f">>> Cached keys failed (reason: {enc_err}), clearing cache and re-pairing", 'yellow'))
+                        # Delete bad keys
+                        try:
+                            await self.device.keystore.delete(str(peer_address))
+                        except:
+                            pass
+                        # Continue to fresh pairing below
             except Exception as e:
                 print(color(f">>> No cached keys found, will pair: {e}", 'yellow'))
 
@@ -575,16 +581,16 @@ class BLEHIDHost:
                 })
 
             if char.uuid == GATT_HID_INFORMATION_CHARACTERISTIC:
-                # Read HID Information to detect device type
+                # Read HID Information to detect device type (for logging only)
                 try:
                     value = await self.peer.read_value(char)
                     if len(value) >= 4:
                         # HID Information format: [bcdHID(2), bCountryCode(1), Flags(1)]
                         # Flags byte bit 0-1: 00=reserved, 01=keyboard, 10=mouse, 11=reserved
                         flags = value[3]
-                        self.device_type = flags & 0x03  # Extract device type bits
-                        device_type_name = {0: 'Unknown', 1: 'Keyboard', 2: 'Mouse', 3: 'Reserved'}.get(self.device_type, 'Unknown')
-                        print(color(f"    HID Information: Device Type = {device_type_name} (0x{self.device_type:02x})", 'green'))
+                        device_type = flags & 0x03
+                        device_type_name = {0: 'Unknown', 1: 'Keyboard', 2: 'Mouse', 3: 'Reserved'}.get(device_type, 'Unknown')
+                        print(color(f"    HID Information: Device Type = {device_type_name} (0x{device_type:02x})", 'green'))
                 except Exception as e:
                     print(color(f"    Failed to read HID Information: {e}", 'yellow'))
 
@@ -642,7 +648,6 @@ class BLEHIDHost:
 
                 if report_type == HID_REPORT_TYPE_INPUT:
                     self.hid_reports[report_id] = char
-                    # Don't subscribe yet - will do that after UHID device is created
 
                 # Store report reference for caching (even if not input report)
                 if not cached_report_ref:
@@ -731,17 +736,24 @@ class BLEHIDHost:
 
         # For 0x68, we need to look at the exact movement pattern
         if button_state == 0x68:
-            # Down: positive Y movement (0x20 = 32)
-            if y_signed > 0:
+            # Down: positive Y movement (typically 0x20 = +32)
+            # Use threshold to ignore small positive jitter
+            if y_signed > 15:
                 return (0x08, "Button 4 (Down)")
 
-            # For negative Y (up movement with button 0x68):
-            # - UP has x=0x00 (no X movement)
-            # - RIGHT has small positive x (like 0x01)
-            if x_movement == 0x00:
-                return (0x02, "Button 2 (Up)")
-            else:
-                return (0x04, "Button 3 (Right)")
+            # Up: significant negative Y movement (need strong negative signal)
+            # Small negative values like -12 (0xF4) are considered noise from DOWN button
+            if y_signed < -20:
+                # UP has x=0x00 (no X movement)
+                # RIGHT has small positive x (like 0x01)
+                if x_movement == 0x00:
+                    return (0x02, "Button 2 (Up)")
+                else:
+                    return (0x04, "Button 3 (Right)")
+
+            # If Y is between -15 and +15, it's likely noise - default to DOWN
+            # since the button is physically pressed
+            return (0x08, "Button 4 (Down)")
 
         # Right button sometimes sends 0xFA
         if button_state == 0xFA:
@@ -757,7 +769,6 @@ class BLEHIDHost:
     def _on_hid_report(self, value):
         """Handle incoming HID input reports and execute button scripts"""
         report_data = bytes(value)
-        print(color(f">>> HID Report: {report_data.hex()}", 'magenta'))
 
         # Button mapping with script execution is always enabled
         if len(report_data) < 2:
@@ -776,7 +787,6 @@ class BLEHIDHost:
             debounce_sec = self.button_executor.debounce_ms / 1000.0
 
             if current_time - self.last_press_time < debounce_sec:
-                print(color(f"    Debounced (too soon)", 'blue'))
                 return
 
             # Map the button combination to a clean single button using movement direction
@@ -786,7 +796,7 @@ class BLEHIDHost:
                 print(color(f"    Unknown button combination: 0x{button_state:02x}", 'yellow'))
                 return
 
-            print(color(f"    Detected: {button_name} (raw: 0x{button_state:02x}, x:{x_movement:02x}, y:{y_movement:02x})", 'cyan'))
+            print(color(f">>> Detected: {button_name} (raw: 0x{button_state:02x}, x:{x_movement:02x}, y:{y_movement:02x})", 'cyan'))
 
             # Execute the script for this button
             self.button_executor.execute_button_script(mapped_button, button_name)
@@ -797,6 +807,13 @@ class BLEHIDHost:
 
     async def run(self, target_address: str):
         """Main loop: connect, pair, discover HID, and receive reports"""
+        disconnection_event = asyncio.Event()
+
+        def on_disconnection_wrapper(reason):
+            """Wrapper to signal disconnection event"""
+            self._on_disconnection(reason)
+            disconnection_event.set()
+
         try:
             await self.start()
 
@@ -830,26 +847,39 @@ class BLEHIDHost:
 
                 await self.connect(target_address)
 
+            # Replace the disconnection handler with our wrapper
+            self.connection.on('disconnection', on_disconnection_wrapper)
+
             # Attempt pairing
-            await self.pair()
+            paired = await self.pair()
+            if not paired:
+                print(color(">>> Pairing failed, exiting", 'red'))
+                return
 
             # Discover HID service
             if await self.discover_hid_service():
-                # Subscribe to HID reports (no UHID device needed)
+                # Subscribe to HID reports
                 await self.subscribe_to_reports()
 
                 print(color("\n>>> Receiving HID reports and executing button scripts. Press Ctrl+C to exit.", 'green'))
 
-                # Wait for disconnection or interrupt
-                await self.transport.source.wait_for_termination()
+                # Wait for disconnection event
+                try:
+                    await disconnection_event.wait()
+                    print(color("\n>>> Connection terminated", 'yellow'))
+                except asyncio.CancelledError:
+                    print(color("\n>>> Connection cancelled", 'yellow'))
 
         except KeyboardInterrupt:
             print(color("\n>>> Interrupted by user", 'yellow'))
+        except asyncio.CancelledError:
+            print(color("\n>>> Connection cancelled", 'yellow'))
         except Exception as e:
             print(color(f">>> Error: {e}", 'red'))
             logging.exception("Error in run()")
         finally:
             await self.cleanup()
+            print(color(">>> Run method completed, returning to caller", 'yellow'))
 
     async def cleanup(self):
         """Clean up resources"""
@@ -887,6 +917,17 @@ async def main():
         action='store_true',
         help='Enable debug logging'
     )
+    parser.add_argument(
+        '--scan-only',
+        action='store_true',
+        help='Scan for devices and exit (for setup script)'
+    )
+    parser.add_argument(
+        '--scan-duration',
+        type=int,
+        default=30,
+        help='Duration to scan for devices in seconds (default: 30)'
+    )
 
     args = parser.parse_args()
 
@@ -898,9 +939,44 @@ async def main():
             format='%(asctime)s %(levelname)s %(name)s: %(message)s'
         )
 
+    # Handle scan-only mode
+    if args.scan_only:
+        print(color(">>> Scanning for BLE devices...", 'cyan'))
+        host = BLEHIDHost(args.transport, args.config)
+        try:
+            await host.start()
+            devices = await host.scan(duration=args.scan_duration, filter_hid=False)
+
+            if devices:
+                print(color(f"\n>>> Found {len(devices)} BLE device(s):", 'green'))
+                for dev in devices:
+                    print(f"  {dev['name']:30s} {dev['address']}")
+            else:
+                print(color("\n>>> No BLE devices found", 'yellow'))
+                print(color(">>> Make sure your device is in pairing mode", 'yellow'))
+
+            await host.cleanup()
+        except Exception as e:
+            print(color(f">>> Error during scan: {e}", 'red'))
+            logging.exception("Scan error")
+        return
+
+    # Load device address from devices.conf if not specified
+    target_address = args.address
+    if not target_address:
+        devices_conf = '/mnt/us/bumble_ble_hid/devices.conf'
+        if os.path.exists(devices_conf):
+            with open(devices_conf, 'r') as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith('#'):
+                        target_address = line
+                        print(color(f">>> Using device from devices.conf: {target_address}", 'cyan'))
+                        break
+
     # Create and run the HID host
     host = BLEHIDHost(args.transport, args.config)
-    await host.run(args.address)
+    await host.run(target_address)
 
 
 if __name__ == '__main__':
