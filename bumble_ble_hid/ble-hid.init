@@ -9,7 +9,7 @@
 # Description:       Maintains persistent connections to BLE HID devices
 ### END INIT INFO
 
-DAEMON=/mnt/us/bumble_ble_hid/ble_hid_daemon.py
+DAEMON=/mnt/us/bumble_ble_hid/daemon.py
 PYTHON=/mnt/us/python3.8-kindle/python3-wrapper.sh
 PIDFILE=/var/run/ble-hid.pid
 LOGFILE=/var/log/ble_hid_daemon.log

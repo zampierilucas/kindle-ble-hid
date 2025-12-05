@@ -18,12 +18,15 @@ deploy:
     scp bumble_ble_hid/config.ini kindle:/mnt/us/bumble_ble_hid/
     scp bumble_ble_hid/ble-hid.init kindle:/etc/init.d/ble-hid
     ssh kindle "chmod +x /etc/init.d/ble-hid"
+    @echo "Copying devices module..."
+    ssh kindle "mkdir -p /mnt/us/bumble_ble_hid/devices"
+    scp bumble_ble_hid/devices/*.py kindle:/mnt/us/bumble_ble_hid/devices/
     @echo "Copying Scripts folder..."
     ssh kindle "mkdir -p /mnt/us/bumble_ble_hid/Scripts"
     scp bumble_ble_hid/Scripts/*.sh kindle:/mnt/us/bumble_ble_hid/Scripts/
     ssh kindle "chmod +x /mnt/us/bumble_ble_hid/Scripts/*.sh"
     @echo "Clearing Python bytecode cache..."
-    ssh kindle "rm -rf /mnt/us/bumble_ble_hid/__pycache__"
+    ssh kindle "rm -rf /mnt/us/bumble_ble_hid/__pycache__ /mnt/us/bumble_ble_hid/devices/__pycache__"
     @echo "Creating cache directory..."
     ssh kindle "mkdir -p /mnt/us/bumble_ble_hid/cache"
     @echo "Starting daemon..."
@@ -91,7 +94,7 @@ test:
 # Check Python syntax
 check:
     @echo "Checking Python syntax..."
-    python3 -m py_compile bumble_ble_hid/*.py
+    python3 -m py_compile bumble_ble_hid/*.py bumble_ble_hid/devices/*.py
     @echo "All files compile successfully!"
 
 # Deploy and follow logs
