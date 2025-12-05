@@ -37,6 +37,9 @@ from bumble.transport import open_transport
 from bumble.core import UUID, AdvertisingData
 from bumble.colors import color
 
+# Local imports
+from gatt_cache import GATTCache
+
 # -----------------------------------------------------------------------------
 # BLE HID Service UUIDs (from Bluetooth SIG)
 # -----------------------------------------------------------------------------
@@ -70,10 +73,13 @@ READING_END_SCRIPT = '/mnt/us/bumble_ble_hid/Scripts/readingEnd.sh'
 
 # Timestamp tracker for performance debugging
 _last_timestamp = None
-_original_print = print
 
-def _timestamped_print(*args, **kwargs):
-    """Print with automatic timestamp and delta"""
+def log_info(*args, **kwargs):
+    """Custom logging function with automatic timestamp and delta for >>> markers
+
+    This replaces the global print override with an explicit logging function.
+    Usage: log_info(">>> Message") instead of print(">>> Message")
+    """
     global _last_timestamp
 
     # Check if first arg is a string (plain or from color()) containing ">>>"
@@ -96,14 +102,11 @@ def _timestamped_print(*args, **kwargs):
             if isinstance(args[0], str):
                 args = (f"[{timestamp_str}]{delta_str} {args[0]}",) + args[1:]
             else:
-                # For colored strings, we need to preserve the color formatting
+                # For colored strings, preserve the color formatting
                 # Just print timestamp separately
-                _original_print(f"[{timestamp_str}]{delta_str}", end=" ")
+                print(f"[{timestamp_str}]{delta_str}", end=" ")
 
-    _original_print(*args, **kwargs)
-
-# Override print for this module
-print = _timestamped_print
+    print(*args, **kwargs)
 
 
 class ButtonScriptExecutor:
@@ -126,34 +129,34 @@ class ButtonScriptExecutor:
             self.debounce_ms = config.get('debounce_ms', 500)
             self.log_button_presses = config.get('log_button_presses', True)
 
-            print(color(f">>> Loaded button configuration from {self.config_path}", 'green'))
-            print(color(f">>> Configured {len(self.button_scripts)} button mappings", 'cyan'))
+            log_info(color(f">>> Loaded button configuration from {self.config_path}", 'green'))
+            log_info(color(f">>> Configured {len(self.button_scripts)} button mappings", 'cyan'))
             for button_hex, script_path in self.button_scripts.items():
                 print(color(f"    {button_hex} -> {script_path}", 'cyan'))
 
         except FileNotFoundError:
-            print(color(f">>> Warning: Config file not found: {self.config_path}", 'yellow'))
-            print(color(f">>> Using default empty configuration", 'yellow'))
+            log_info(color(f">>> Warning: Config file not found: {self.config_path}", 'yellow'))
+            log_info(color(f">>> Using default empty configuration", 'yellow'))
         except json.JSONDecodeError as e:
-            print(color(f">>> Error parsing config file: {e}", 'red'))
-            print(color(f">>> Using default empty configuration", 'yellow'))
+            log_info(color(f">>> Error parsing config file: {e}", 'red'))
+            log_info(color(f">>> Using default empty configuration", 'yellow'))
 
     def execute_button_script(self, button_code: int, button_name: str):
         """Execute the script mapped to a button press"""
         button_hex = f"0x{button_code:02x}"
 
         if self.log_button_presses:
-            print(color(f">>> Button press: {button_name} (code: {button_hex})", 'green'))
+            log_info(color(f">>> Button press: {button_name} (code: {button_hex})", 'green'))
 
         script_path = self.button_scripts.get(button_hex)
 
         if not script_path:
-            print(color(f">>> No script configured for button {button_hex}", 'yellow'))
+            log_info(color(f">>> No script configured for button {button_hex}", 'yellow'))
             return
 
         # Check if script exists
         if not os.path.exists(script_path):
-            print(color(f">>> Script not found: {script_path}", 'red'))
+            log_info(color(f">>> Script not found: {script_path}", 'red'))
             return
 
         # Execute script in background
@@ -164,9 +167,9 @@ class ButtonScriptExecutor:
                 stderr=subprocess.PIPE,
                 start_new_session=True  # Detach from parent process
             )
-            print(color(f">>> Executed: {script_path}", 'green'))
+            log_info(color(f">>> Executed: {script_path}", 'green'))
         except Exception as e:
-            print(color(f">>> Failed to execute script: {e}", 'red'))
+            log_info(color(f">>> Failed to execute script: {e}", 'red'))
 
 
 # -----------------------------------------------------------------------------
@@ -179,20 +182,20 @@ class SimplePairingDelegate(PairingDelegate):
         super().__init__(io_capability=io_capability)
 
     async def accept(self):
-        print(color(">>> Pairing request received - accepting", 'green'))
+        log_info(color(">>> Pairing request received - accepting", 'green'))
         return True
 
     async def compare_numbers(self, number, digits):
-        print(color(f">>> Confirm number: {number:0{digits}}", 'yellow'))
-        print(color(">>> Auto-accepting (press Ctrl+C to cancel)", 'yellow'))
+        log_info(color(f">>> Confirm number: {number:0{digits}}", 'yellow'))
+        log_info(color(">>> Auto-accepting (press Ctrl+C to cancel)", 'yellow'))
         return True
 
     async def get_number(self):
-        print(color(">>> Enter PIN (or 0 for default): ", 'yellow'))
+        log_info(color(">>> Enter PIN (or 0 for default): ", 'yellow'))
         return 0
 
     async def display_number(self, number, digits):
-        print(color(f">>> Display PIN: {number:0{digits}}", 'cyan'))
+        log_info(color(f">>> Display PIN: {number:0{digits}}", 'cyan'))
 
 
 # -----------------------------------------------------------------------------
@@ -213,6 +216,7 @@ class BLEHIDHost:
         self.last_execution_time = 0  # Timestamp of last script execution (for debouncing)
         self.current_device_address = None  # Track connected device for cache
         self.device_name = None  # BLE device name from Generic Access Service
+        self.gatt_cache = GATTCache(GATT_CACHE_DIR)  # GATT cache manager
 
     async def start(self, transport_timeout: int = 30, hci_reset_timeout: int = 10):
         """Initialize the Bumble device.
@@ -222,15 +226,15 @@ class BLEHIDHost:
             hci_reset_timeout: Timeout for HCI Reset command (default 10s)
                               If BT hardware is asleep, this will timeout and raise.
         """
-        print(color(f">>> Kindle BLE HID Host v{__version__}", 'cyan'))
-        print(color(">>> Opening transport...", 'blue'))
+        log_info(color(f">>> Kindle BLE HID Host v{__version__}", 'cyan'))
+        log_info(color(">>> Opening transport...", 'blue'))
         try:
             self.transport = await asyncio.wait_for(
                 open_transport(self.transport_spec),
                 timeout=transport_timeout
             )
         except asyncio.TimeoutError:
-            print(color(f">>> Transport open timed out after {transport_timeout}s", 'red'))
+            log_info(color(f">>> Transport open timed out after {transport_timeout}s", 'red'))
             raise
 
         # Set up persistent key store for bonding
@@ -264,23 +268,23 @@ class BLEHIDHost:
         # Send HCI Reset to ensure clean hardware state
         # This is critical after Kindle wakes from sleep - the BT hardware may be
         # in an inconsistent state. If this times out, the hardware is likely asleep.
-        print(color(">>> Sending HCI Reset...", 'blue'))
+        log_info(color(">>> Sending HCI Reset...", 'blue'))
         try:
             await asyncio.wait_for(
                 self.device.host.send_command(HCI_Reset_Command()),
                 timeout=hci_reset_timeout
             )
-            print(color(">>> HCI Reset successful", 'green'))
+            log_info(color(">>> HCI Reset successful", 'green'))
         except asyncio.TimeoutError:
-            print(color(f">>> HCI Reset timed out after {hci_reset_timeout}s - BT hardware may be asleep", 'red'))
+            log_info(color(f">>> HCI Reset timed out after {hci_reset_timeout}s - BT hardware may be asleep", 'red'))
             raise
 
         await self.device.power_on()
-        print(color(f">>> Device powered on: {self.device.public_address}", 'green'))
+        log_info(color(f">>> Device powered on: {self.device.public_address}", 'green'))
 
     async def scan(self, duration: float = 10.0, filter_hid: bool = True):
         """Scan for BLE devices, optionally filtering for HID devices"""
-        print(color(f">>> Scanning for {duration} seconds...", 'blue'))
+        log_info(color(f">>> Scanning for {duration} seconds...", 'blue'))
 
         devices_found = []
         seen_addresses = set()
@@ -338,12 +342,12 @@ class BLEHIDHost:
         await asyncio.sleep(duration)
         await self.device.stop_scanning()
 
-        print(color(f">>> Scan complete. Found {len(devices_found)} devices.", 'green'))
+        log_info(color(f">>> Scan complete. Found {len(devices_found)} devices.", 'green'))
         return devices_found
 
     async def connect(self, address: str, timeout: int = 30):
         """Connect to a BLE device"""
-        print(color(f">>> Connecting to {address}...", 'blue'))
+        log_info(color(f">>> Connecting to {address}...", 'blue'))
 
         # Track device address for cache
         self.current_device_address = address
@@ -356,52 +360,51 @@ class BLEHIDHost:
             )
         except asyncio.TimeoutError:
             # Connection timeout is not an error - device might be off
-            print(color(f">>> Connection timeout after {timeout}s (device may be off or out of range)", 'yellow'))
+            log_info(color(f">>> Connection timeout after {timeout}s (device may be off or out of range)", 'yellow'))
             return False
 
         self.peer = Peer(self.connection)
 
-        print(color(f">>> Connected to {self.connection.peer_address}", 'green'))
+        log_info(color(f">>> Connected to {self.connection.peer_address}", 'green'))
 
-        # Set up connection event handlers
-        self.connection.on('disconnection', self._on_disconnection)
+        # Set up connection event handlers (except disconnection, which is handled in run())
         self.connection.on('pairing', self._on_pairing)
         self.connection.on('pairing_failure', self._on_pairing_failure)
 
         return True
 
     def _on_disconnection(self, reason):
-        print(color(f">>> Disconnected: reason={reason}", 'red'))
+        log_info(color(f">>> Disconnected: reason={reason}", 'red'))
         self._run_reading_end_script()
 
     def _run_reading_end_script(self):
         """Execute the reading end script on disconnection"""
         if not os.path.exists(READING_END_SCRIPT):
-            print(color(f">>> Reading end script not found: {READING_END_SCRIPT}", 'yellow'))
+            log_info(color(f">>> Reading end script not found: {READING_END_SCRIPT}", 'yellow'))
             return
 
         try:
-            print(color(f">>> Executing reading end script: {READING_END_SCRIPT}", 'cyan'))
+            log_info(color(f">>> Executing reading end script: {READING_END_SCRIPT}", 'cyan'))
             subprocess.Popen(
                 [READING_END_SCRIPT],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 start_new_session=True
             )
-            print(color(">>> Reading end script launched", 'green'))
+            log_info(color(">>> Reading end script launched", 'green'))
         except Exception as e:
-            print(color(f">>> Failed to execute reading end script: {e}", 'red'))
+            log_info(color(f">>> Failed to execute reading end script: {e}", 'red'))
 
     def _on_pairing(self, keys):
-        print(color(">>> Pairing successful!", 'green'))
+        log_info(color(">>> Pairing successful!", 'green'))
 
     def _on_pairing_failure(self, reason):
-        print(color(f">>> Pairing failed: {reason}", 'red'))
+        log_info(color(f">>> Pairing failed: {reason}", 'red'))
 
     async def pair(self):
         """Initiate pairing with the connected device (or use cached keys if available)"""
         if not self.connection:
-            print(color(">>> Not connected!", 'red'))
+            log_info(color(">>> Not connected!", 'red'))
             return False
 
         # Check if we have bonding keys for this device
@@ -410,15 +413,15 @@ class BLEHIDHost:
             try:
                 keys = await self.device.keystore.get(str(peer_address))
                 if keys:
-                    print(color(f">>> Using cached bonding keys for {peer_address}", 'cyan'))
+                    log_info(color(f">>> Using cached bonding keys for {peer_address}", 'cyan'))
                     # Request encryption (will use cached keys)
                     try:
                         await self.connection.encrypt()
-                        print(color(">>> Bonding restored!", 'green'))
+                        log_info(color(">>> Bonding restored!", 'green'))
                         return True
                     except asyncio.CancelledError:
                         # Connection was terminated during encryption - likely bad cached keys
-                        print(color(f">>> Cached keys rejected by device (disconnected), clearing cache", 'yellow'))
+                        log_info(color(f">>> Cached keys rejected by device (disconnected), clearing cache", 'yellow'))
                         # Delete bad keys
                         try:
                             await self.device.keystore.delete(str(peer_address))
@@ -427,7 +430,7 @@ class BLEHIDHost:
                         # Return False since connection is gone
                         return False
                     except Exception as enc_err:
-                        print(color(f">>> Cached keys failed (reason: {enc_err}), clearing cache and re-pairing", 'yellow'))
+                        log_info(color(f">>> Cached keys failed (reason: {enc_err}), clearing cache and re-pairing", 'yellow'))
                         # Delete bad keys
                         try:
                             await self.device.keystore.delete(str(peer_address))
@@ -435,83 +438,49 @@ class BLEHIDHost:
                             pass
                         # Continue to fresh pairing below
             except Exception as e:
-                print(color(f">>> No cached keys found, will pair: {e}", 'yellow'))
+                log_info(color(f">>> No cached keys found, will pair: {e}", 'yellow'))
 
         # No cached keys, perform full pairing
-        print(color(">>> Initiating pairing...", 'blue'))
+        log_info(color(">>> Initiating pairing...", 'blue'))
         try:
             await self.connection.pair()
-            print(color(">>> Pairing complete!", 'green'))
+            log_info(color(">>> Pairing complete!", 'green'))
             return True
         except Exception as e:
-            print(color(f">>> Pairing error: {e}", 'red'))
+            log_info(color(f">>> Pairing error: {e}", 'red'))
             return False
 
-    def _get_cache_path(self, address: str):
-        """Get cache file path for device address"""
-        safe_addr = address.replace(':', '_').replace('/', '_')
-        return os.path.join(GATT_CACHE_DIR, f"{safe_addr}.json")
-
-    def _load_cache(self, address: str):
-        """Load cached GATT attributes for device"""
-        cache_path = self._get_cache_path(address)
-        if not os.path.exists(cache_path):
-            return None
-
-        try:
-            with open(cache_path, 'r') as f:
-                cache = json.load(f)
-                # Validate cache structure
-                if 'report_map' not in cache:
-                    logging.warning(f"Invalid cache structure for {address}")
-                    return None
-                print(color(f">>> Loaded GATT cache for {address}", 'green'))
-                return cache
-        except Exception as e:
-            logging.warning(f"Failed to load cache for {address}: {e}")
-            return None
-
-    def _save_cache(self, address: str, cache_data: dict):
-        """Save GATT attributes to cache"""
-        try:
-            os.makedirs(GATT_CACHE_DIR, exist_ok=True)
-            cache_path = self._get_cache_path(address)
-            with open(cache_path, 'w') as f:
-                json.dump(cache_data, f, indent=2)
-            print(color(f">>> Saved GATT cache for {address}", 'green'))
-        except Exception as e:
-            logging.warning(f"Failed to save cache for {address}: {e}")
 
     async def discover_hid_service(self):
         """Discover and subscribe to HID service characteristics"""
         if not self.peer:
-            print(color(">>> Not connected!", 'red'))
+            log_info(color(">>> Not connected!", 'red'))
             return False
 
         # Try to load from cache first
         cache = None
         if self.current_device_address:
-            cache = self._load_cache(self.current_device_address)
+            cache = self.gatt_cache.load(self.current_device_address)
             if cache:
                 try:
                     # Restore report map from cache
                     self.report_map = bytes.fromhex(cache['report_map'])
-                    print(color(f">>> Using cached report map ({len(self.report_map)} bytes)", 'green'))
+                    log_info(color(f">>> Using cached report map ({len(self.report_map)} bytes)", 'green'))
 
                     # Restore device name from cache if available
                     if 'device_name' in cache and cache['device_name']:
                         self.device_name = cache['device_name']
-                        print(color(f">>> Using cached device name: {self.device_name}", 'green'))
+                        log_info(color(f">>> Using cached device name: {self.device_name}", 'green'))
 
                     # Note: We still need to discover services to get characteristic handles
                     # but we skip reading the report map
-                    print(color(">>> Discovering GATT services (using cached data)...", 'blue'))
+                    log_info(color(">>> Discovering GATT services (using cached data)...", 'blue'))
                 except Exception as e:
                     logging.warning(f"Cache corrupt, re-discovering: {e}")
                     cache = None
 
         if not cache:
-            print(color(">>> Discovering GATT services...", 'blue'))
+            log_info(color(">>> Discovering GATT services...", 'blue'))
 
         # Discover all services
         await self.peer.discover_services()
@@ -527,27 +496,27 @@ class BLEHIDHost:
                     if device_name_chars:
                         name_value = await self.peer.read_value(device_name_chars[0])
                         self.device_name = bytes(name_value).decode('utf-8', errors='replace')
-                        print(color(f">>> Device Name: {self.device_name}", 'cyan'))
+                        log_info(color(f">>> Device Name: {self.device_name}", 'cyan'))
                         # Note: Cache will be saved after report_map is read
             except Exception as e:
                 logging.warning(f"Could not read device name: {e}")
         else:
-            print(color(f">>> Device Name: {self.device_name} (cached)", 'cyan'))
+            log_info(color(f">>> Device Name: {self.device_name} (cached)", 'cyan'))
 
         # Find HID service
         hid_services = [s for s in self.peer.services if s.uuid == GATT_HID_SERVICE]
 
         if not hid_services:
-            print(color(">>> HID service not found!", 'red'))
+            log_info(color(">>> HID service not found!", 'red'))
             return False
 
         hid_service = hid_services[0]
-        print(color(f">>> Found HID service: {hid_service.uuid}", 'green'))
+        log_info(color(f">>> Found HID service: {hid_service.uuid}", 'green'))
 
         # Check if we have cached characteristics
         characteristics_cached = False
         if cache and 'characteristics' in cache:
-            print(color(">>> Loading characteristics from cache...", 'cyan'))
+            log_info(color(">>> Loading characteristics from cache...", 'cyan'))
             try:
                 # Reconstruct characteristics from cache
                 cached_chars = []
@@ -594,16 +563,16 @@ class BLEHIDHost:
                 # Replace service characteristics with cached ones
                 hid_service.characteristics = cached_chars
                 characteristics_cached = True
-                print(color(f">>> Loaded {len(cached_chars)} characteristics from cache", 'green'))
+                log_info(color(f">>> Loaded {len(cached_chars)} characteristics from cache", 'green'))
             except Exception as e:
                 logging.warning(f"Failed to load cached characteristics: {e}")
                 characteristics_cached = False
 
         # Discover characteristics if not cached (pass service as named argument)
         if not characteristics_cached:
-            print(color(">>> Discovering characteristics...", 'cyan'))
+            log_info(color(">>> Discovering characteristics...", 'cyan'))
             await self.peer.discover_characteristics(service=hid_service)
-            print(color(f">>> Discovered {len(hid_service.characteristics)} characteristics", 'green'))
+            log_info(color(f">>> Discovered {len(hid_service.characteristics)} characteristics", 'green'))
 
         # Track report references and characteristics for caching
         report_refs = {}
@@ -657,7 +626,7 @@ class BLEHIDHost:
                                 'report_map': self.report_map.hex(),
                                 'device_name': self.device_name  # May be None initially
                             }
-                            self._save_cache(self.current_device_address, cache_data)
+                            self.gatt_cache.save(self.current_device_address, cache_data)
                     except Exception as e:
                         print(color(f"    Failed to read report map: {e}", 'red'))
                 else:
@@ -712,10 +681,10 @@ class BLEHIDHost:
                     updates.append(f"{len(report_refs)} report references")
                 if characteristics_to_cache:
                     updates.append(f"{len(characteristics_to_cache)} characteristics")
-                print(color(f">>> Updating cache with {', '.join(updates)}...", 'blue'))
+                log_info(color(f">>> Updating cache with {', '.join(updates)}...", 'blue'))
 
                 # Load existing cache or create new one
-                existing_cache = self._load_cache(self.current_device_address)
+                existing_cache = self.gatt_cache.load(self.current_device_address)
                 if not existing_cache:
                     existing_cache = {}
 
@@ -735,12 +704,12 @@ class BLEHIDHost:
                 if self.device_name:
                     existing_cache['device_name'] = self.device_name
 
-                self._save_cache(self.current_device_address, existing_cache)
-                print(color(f">>> Cache updated successfully", 'green'))
+                self.gatt_cache.save(self.current_device_address, existing_cache)
+                log_info(color(f">>> Cache updated successfully", 'green'))
             except Exception as e:
                 logging.warning(f"Failed to update cache: {e}")
         else:
-            print(color(">>> All data loaded from cache", 'green'))
+            log_info(color(">>> All data loaded from cache", 'green'))
 
         return True
 
@@ -750,9 +719,9 @@ class BLEHIDHost:
         for report_id, char in self.hid_reports.items():
             try:
                 await self.peer.subscribe(char, self._on_hid_report)
-                print(color(f">>> Subscribed to input report {report_id}", 'green'))
+                log_info(color(f">>> Subscribed to input report {report_id}", 'green'))
             except Exception as e:
-                print(color(f">>> Failed to subscribe to report {report_id}: {e}", 'yellow'))
+                log_info(color(f">>> Failed to subscribe to report {report_id}: {e}", 'yellow'))
 
     def _map_button_combination(self, button_state, x_movement=0, y_movement=0):
         """
@@ -871,7 +840,7 @@ class BLEHIDHost:
             return
 
         # Log the raw data that led to this button press
-        print(color(f">>> Button press: {button_name} (raw: 0x{button_state:02x}, x:{x_movement:02x}, y:{y_movement:02x})", 'cyan'))
+        log_info(color(f">>> Button press: {button_name} (raw: 0x{button_state:02x}, x:{x_movement:02x}, y:{y_movement:02x})", 'cyan'))
 
         # Execute script for this button press
         self.button_executor.execute_button_script(mapped_button, button_name)
@@ -903,8 +872,8 @@ class BLEHIDHost:
                 while not devices:
                     devices = await self.scan(duration=10.0, filter_hid=True)
                     if not devices:
-                        print(color(">>> No HID devices found. Scanning again in 3 seconds...", 'yellow'))
-                        print(color(">>> (Make sure your device is in pairing mode. Press Ctrl+C to exit)", 'cyan'))
+                        log_info(color(">>> No HID devices found. Scanning again in 3 seconds...", 'yellow'))
+                        log_info(color(">>> (Make sure your device is in pairing mode. Press Ctrl+C to exit)", 'cyan'))
                         await asyncio.sleep(3)
 
                 print("\nSelect device:")
@@ -934,7 +903,7 @@ class BLEHIDHost:
             # Attempt pairing
             paired = await self.pair()
             if not paired:
-                print(color(">>> Pairing failed, exiting", 'red'))
+                log_info(color(">>> Pairing failed, exiting", 'red'))
                 return
 
             # Discover HID service
@@ -942,25 +911,25 @@ class BLEHIDHost:
                 # Subscribe to HID reports
                 await self.subscribe_to_reports()
 
-                print(color("\n>>> Receiving HID reports and executing button scripts. Press Ctrl+C to exit.", 'green'))
+                log_info(color("\n>>> Receiving HID reports and executing button scripts. Press Ctrl+C to exit.", 'green'))
 
                 # Wait for disconnection event
                 try:
                     await disconnection_event.wait()
-                    print(color("\n>>> Connection terminated", 'yellow'))
+                    log_info(color("\n>>> Connection terminated", 'yellow'))
                 except asyncio.CancelledError:
-                    print(color("\n>>> Connection cancelled", 'yellow'))
+                    log_info(color("\n>>> Connection cancelled", 'yellow'))
 
         except KeyboardInterrupt:
-            print(color("\n>>> Interrupted by user", 'yellow'))
+            log_info(color("\n>>> Interrupted by user", 'yellow'))
         except asyncio.CancelledError:
-            print(color("\n>>> Connection cancelled", 'yellow'))
+            log_info(color("\n>>> Connection cancelled", 'yellow'))
         except Exception as e:
-            print(color(f">>> Error: {e}", 'red'))
+            log_info(color(f">>> Error: {e}", 'red'))
             logging.exception("Error in run()")
         finally:
             await self.cleanup()
-            print(color(">>> Run method completed, returning to caller", 'yellow'))
+            log_info(color(">>> Run method completed, returning to caller", 'yellow'))
 
     async def cleanup(self):
         """Clean up resources"""
@@ -1022,23 +991,23 @@ async def main():
 
     # Handle scan-only mode
     if args.scan_only:
-        print(color(">>> Scanning for BLE devices...", 'cyan'))
+        log_info(color(">>> Scanning for BLE devices...", 'cyan'))
         host = BLEHIDHost(args.transport, args.config)
         try:
             await host.start()
             devices = await host.scan(duration=args.scan_duration, filter_hid=False)
 
             if devices:
-                print(color(f"\n>>> Found {len(devices)} BLE device(s):", 'green'))
+                log_info(color(f"\n>>> Found {len(devices)} BLE device(s):", 'green'))
                 for dev in devices:
                     print(f"  {dev['name']:30s} {dev['address']}")
             else:
-                print(color("\n>>> No BLE devices found", 'yellow'))
-                print(color(">>> Make sure your device is in pairing mode", 'yellow'))
+                log_info(color("\n>>> No BLE devices found", 'yellow'))
+                log_info(color(">>> Make sure your device is in pairing mode", 'yellow'))
 
             await host.cleanup()
         except Exception as e:
-            print(color(f">>> Error during scan: {e}", 'red'))
+            log_info(color(f">>> Error during scan: {e}", 'red'))
             logging.exception("Scan error")
         return
 
@@ -1052,7 +1021,7 @@ async def main():
                     line = line.strip()
                     if line and not line.startswith('#'):
                         target_address = line
-                        print(color(f">>> Using device from devices.conf: {target_address}", 'cyan'))
+                        log_info(color(f">>> Using device from devices.conf: {target_address}", 'cyan'))
                         break
 
     # Create and run the HID host

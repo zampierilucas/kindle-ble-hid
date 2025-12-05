@@ -67,17 +67,21 @@ kindle/
 │   ├── ble_hid_daemon.py       # Persistent daemon
 │   ├── button_config.json      # Button-to-script mapping
 │   ├── devices.conf.example    # Device addresses config
-│   └── ble-hid.init            # Init script template
+│   ├── config.ini              # Configuration file
+│   ├── ble-hid.init            # Init script template
+│   └── Scripts/                # Shell scripts for button actions
+│       ├── brightnessUp.sh
+│       ├── brightnessDown.sh
+│       ├── nextPage.sh
+│       └── prevPage.sh
 │
-├── Scripts/                    # Shell scripts for button actions
-│   ├── brightnessUp.sh
-│   ├── brightnessDown.sh
-│   ├── nextPage.sh
-│   └── prevPage.sh
 │
 ├── docs/
 │   └── BLE_SMP_LIMITATION.md   # Technical background
 │
-└── test/                       # Test suite
-    └── test_logic_only.py
+└── tests/                      # Test suite
+    ├── unit/                   # Unit tests
+    │   ├── test_logic_only.py
+    │   └── test_pure_passthrough.py
+    └── Dockerfile              # Test environment
 ```

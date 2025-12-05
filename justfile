@@ -15,6 +15,7 @@ deploy:
     @echo "Copying files..."
     scp bumble_ble_hid/*.py kindle:/mnt/us/bumble_ble_hid/
     scp bumble_ble_hid/button_config.json kindle:/mnt/us/bumble_ble_hid/
+    scp bumble_ble_hid/config.ini kindle:/mnt/us/bumble_ble_hid/
     scp bumble_ble_hid/ble-hid.init kindle:/etc/init.d/ble-hid
     ssh kindle "chmod +x /etc/init.d/ble-hid"
     @echo "Copying Scripts folder..."
@@ -83,8 +84,9 @@ ssh:
 
 # Run tests locally
 test:
-    @echo "Running logic-only tests..."
-    python3 test/test_logic_only.py
+    @echo "Running unit tests..."
+    python3 tests/unit/test_logic_only.py
+    python3 tests/unit/test_pure_passthrough.py
 
 # Check Python syntax
 check:
