@@ -17,7 +17,7 @@ from typing import Dict, Optional
 from config import config
 from logging_utils import log
 from devices.base import ButtonMapper
-from devices.ble_m3 import BLEM3Mapper
+from devices import get_mapper_for_device
 
 __all__ = ['ButtonHandler']
 
@@ -32,22 +32,30 @@ class ButtonHandler:
     - Execute shell scripts based on button mappings
     """
 
-    def __init__(self, config_path: Optional[str] = None,
-                 mapper: Optional[ButtonMapper] = None):
+    def __init__(self, config_path: Optional[str] = None, mapper: Optional[ButtonMapper] = None):
         """Initialize button handler.
 
         Args:
             config_path: Path to button_config.json (uses default if None)
-            mapper: Button mapper instance (uses BLEM3Mapper if None)
+            mapper: Button mapper instance (auto-detected later if None)
         """
         self.config_path = config_path or config.button_config_file
-        self.mapper = mapper or BLEM3Mapper()
+        self.mapper = mapper  # Will be set when device connects
         self.button_scripts: Dict[str, str] = {}
         self.debounce_ms = config.debounce_ms
         self.log_button_presses = config.log_button_presses
         self.last_execution_time = 0.0
 
         self._load_config()
+
+    def set_device(self, device_name: Optional[str]):
+        """Set the button mapper based on connected device name.
+
+        Args:
+            device_name: BLE device name (e.g., "BLE-M3", "BEAUTY-R1")
+        """
+        self.mapper = get_mapper_for_device(device_name)
+        log.info(f"Using button mapper: {self.mapper.device_name}")
 
     def _load_config(self):
         """Load button-to-script mappings from JSON config."""
@@ -57,8 +65,7 @@ class ButtonHandler:
 
             self.button_scripts = cfg.get('buttons', {})
             self.debounce_ms = cfg.get('debounce_ms', self.debounce_ms)
-            self.log_button_presses = cfg.get('log_button_presses',
-                                               self.log_button_presses)
+            self.log_button_presses = cfg.get('log_button_presses', self.log_button_presses)
 
             log.success(f"Loaded button configuration from {self.config_path}")
             log.info(f"Configured {len(self.button_scripts)} button mappings")
@@ -87,6 +94,10 @@ class ButtonHandler:
         if len(report_data) < 2:
             return False
 
+        # Ensure we have a mapper (use default if not set)
+        if self.mapper is None:
+            self.set_device(None)
+
         # Extract fields from report
         button_state = report_data[1]
         x_movement = report_data[2] if len(report_data) > 2 else 0
@@ -97,9 +108,7 @@ class ButtonHandler:
             return False
 
         # Map to standardized button code
-        button_code, button_name = self.mapper.map(
-            button_state, x_movement, y_movement
-        )
+        button_code, button_name = self.mapper.map(button_state, x_movement, y_movement)
 
         # Ignore unrecognized/noise patterns
         if button_code is None:
@@ -111,9 +120,7 @@ class ButtonHandler:
 
         # Log the button press with raw data
         if self.log_button_presses:
-            log.info(f"Button press: {button_name} "
-                    f"(raw: 0x{button_state:02x}, "
-                    f"x:{x_movement:02x}, y:{y_movement:02x})")
+            log.info(f"Button press: {button_name} (raw: 0x{button_state:02x}, x:{x_movement:02x}, y:{y_movement:02x})")
 
         # Execute the script
         return self._execute_script(button_code, button_name)

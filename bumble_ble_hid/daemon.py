@@ -2,11 +2,12 @@
 """
 BLE HID Daemon - Persistent connection manager
 
-Automatically connects to a configured BLE HID device and maintains
+Automatically connects to configured BLE HID devices and maintains
 persistent connection with auto-reconnect.
 
 Configuration file: /mnt/us/bumble_ble_hid/devices.conf
-Format: Single device address (first non-comment line)
+Format: One MAC address per line (comments start with #)
+        Tries each device in order until one connects.
 
 Author: Lucas Zampieri <lzampier@redhat.com>
 """
@@ -31,9 +32,10 @@ logger = logging.getLogger(__name__)
 
 
 class BLEHIDDaemon:
-    """Daemon that maintains persistent connection to a BLE HID device.
+    """Daemon that maintains persistent connection to BLE HID devices.
 
     Features:
+    - Multiple device support (tries each until one connects)
     - Auto-reconnect on disconnection
     - Connection cycle timeout for hardware sleep recovery
     - Exponential backoff on repeated timeouts
@@ -41,51 +43,58 @@ class BLEHIDDaemon:
     """
 
     def __init__(self):
-        self.device_address = None
+        self.device_addresses = []
+        self.current_device_index = 0
         self.running = False
         self.host = None
         self.consecutive_timeouts = 0
 
-    def load_device(self) -> bool:
-        """Load device address from config file.
+    def load_devices(self) -> bool:
+        """Load device addresses from config file.
 
         Returns:
-            True if device address loaded successfully
+            True if at least one device address loaded successfully
         """
-        self.device_address = config.get_device_address()
+        self.device_addresses = config.get_device_addresses()
 
-        if not self.device_address:
-            logger.error(f"No device address found in {config.devices_config_file}")
+        if not self.device_addresses:
+            logger.error(f"No device addresses found in {config.devices_config_file}")
             return False
 
-        logger.info(f"Loaded device: {self.device_address}")
+        logger.info(f"Loaded {len(self.device_addresses)} device(s):")
+        for i, addr in enumerate(self.device_addresses):
+            logger.info(f"  [{i+1}] {addr}")
         return True
+
+    def get_next_device(self) -> str:
+        """Get the next device address to try (round-robin)."""
+        addr = self.device_addresses[self.current_device_index]
+        self.current_device_index = (self.current_device_index + 1) % len(self.device_addresses)
+        return addr
 
     async def run(self):
         """Main daemon loop with auto-reconnect."""
         self.running = True
 
-        if not self.load_device():
+        if not self.load_devices():
             logger.error("Failed to load device configuration")
             return
 
         logger.info(f"BLE HID Daemon v{__version__}")
-        logger.info(f"Device: {self.device_address}")
         logger.info(f"Transport: {config.transport}")
 
         # Reconnection loop
         while self.running:
+            device_address = self.get_next_device()
             try:
                 logger.info("=== Starting new connection attempt ===")
+                logger.info(f"Target device: {device_address}")
                 logger.info("Creating BLE HID host...")
                 self.host = BLEHIDHost(config.transport)
 
                 logger.info("Connecting to device...")
                 # Wrap entire connection cycle with timeout
-                await asyncio.wait_for(
-                    self.host.run(self.device_address),
-                    timeout=config.cycle_timeout
-                )
+                await asyncio.wait_for(self.host.run(device_address), timeout=config.cycle_timeout)
                 logger.info("host.run() returned")
 
                 # Connection ended normally
@@ -94,10 +103,7 @@ class BLEHIDDaemon:
 
             except asyncio.TimeoutError:
                 self.consecutive_timeouts += 1
-                logger.warning(
-                    f"Connection cycle timed out after {config.cycle_timeout}s "
-                    f"(consecutive: {self.consecutive_timeouts})"
-                )
+                logger.warning(f"Connection cycle timed out after {config.cycle_timeout}s (consecutive: {self.consecutive_timeouts})")
                 logger.warning("BT hardware may be asleep - forcing transport cleanup")
                 await self._force_cleanup()
 

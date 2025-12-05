@@ -10,7 +10,7 @@ Author: Lucas Zampieri <lzampier@redhat.com>
 
 import configparser
 import os
-from typing import Optional
+from typing import List, Optional
 
 __all__ = ['config', 'Config']
 
@@ -44,22 +44,16 @@ class Config:
             self._parser.read(config_file)
 
         # Paths
-        self.cache_dir = self._get('paths', 'cache_dir',
-                                   f'{self.base_path}/cache')
+        self.cache_dir = self._get('paths', 'cache_dir', f'{self.base_path}/cache')
         self.pairing_keys_file = os.path.join(self.cache_dir, 'pairing_keys.json')
-        self.button_config_file = self._get('paths', 'button_config',
-                                            f'{self.base_path}/button_config.json')
-        self.devices_config_file = self._get('paths', 'devices_config',
-                                             f'{self.base_path}/devices.conf')
-        self.scripts_dir = self._get('paths', 'scripts_dir',
-                                     f'{self.base_path}/Scripts')
+        self.button_config_file = self._get('paths', 'button_config', f'{self.base_path}/button_config.json')
+        self.devices_config_file = self._get('paths', 'devices_config', f'{self.base_path}/devices.conf')
+        self.scripts_dir = self._get('paths', 'scripts_dir', f'{self.base_path}/Scripts')
         self.reading_end_script = os.path.join(self.scripts_dir, 'readingEnd.sh')
-        self.log_file = self._get('logging', 'log_file',
-                                  '/var/log/ble_hid_daemon.log')
+        self.log_file = self._get('logging', 'log_file', '/var/log/ble_hid_daemon.log')
 
         # Transport
-        self.transport = self._get('transport', 'hci_transport',
-                                   'file:/dev/stpbt')
+        self.transport = self._get('transport', 'hci_transport', 'file:/dev/stpbt')
 
         # Connection timeouts (seconds)
         self.reconnect_delay = self._getint('connection', 'reconnect_delay', 5)
@@ -97,18 +91,28 @@ class Config:
         except (configparser.NoSectionError, configparser.NoOptionError, ValueError):
             return default
 
-    def get_device_address(self) -> Optional[str]:
-        """Load device address from devices.conf"""
-        if not os.path.exists(self.devices_config_file):
-            return None
+    def get_device_addresses(self) -> List[str]:
+        """Load all device addresses from devices.conf.
 
+        Returns:
+            List of MAC addresses (non-empty lines that don't start with #)
+        """
+        if not os.path.exists(self.devices_config_file):
+            return []
+
+        addresses = []
         with open(self.devices_config_file, 'r') as f:
             for line in f:
                 line = line.strip()
                 if line and not line.startswith('#'):
-                    return line
+                    addresses.append(line)
 
-        return None
+        return addresses
+
+    def get_device_address(self) -> Optional[str]:
+        """Load first device address from devices.conf (legacy method)."""
+        addresses = self.get_device_addresses()
+        return addresses[0] if addresses else None
 
 
 # Global singleton instance

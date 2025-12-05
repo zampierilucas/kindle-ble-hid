@@ -26,7 +26,7 @@ from bumble.transport import open_transport
 from bumble.core import UUID, AdvertisingData
 
 from config import config
-from logging_utils import log, color
+from logging_utils import log
 from gatt_cache import GATTCache
 from button_handler import ButtonHandler
 from pairing import create_pairing_config, create_keystore
@@ -91,21 +91,13 @@ class BLEHIDHost:
         log.info("Opening transport...")
 
         try:
-            self.transport = await asyncio.wait_for(
-                open_transport(self.transport_spec),
-                timeout=config.transport_timeout
-            )
+            self.transport = await asyncio.wait_for(open_transport(self.transport_spec), timeout=config.transport_timeout)
         except asyncio.TimeoutError:
             log.error(f"Transport open timed out after {config.transport_timeout}s")
             raise
 
         # Create Bumble device
-        self.device = Device.with_hci(
-            config.device_name,
-            config.device_address,
-            self.transport.source,
-            self.transport.sink
-        )
+        self.device = Device.with_hci(config.device_name, config.device_address, self.transport.source, self.transport.sink)
 
         # Attach key store and pairing config
         self.device.keystore = self.keystore
@@ -114,14 +106,10 @@ class BLEHIDHost:
         # HCI Reset - critical for sleep recovery
         log.info("Sending HCI Reset...")
         try:
-            await asyncio.wait_for(
-                self.device.host.send_command(HCI_Reset_Command()),
-                timeout=config.hci_reset_timeout
-            )
+            await asyncio.wait_for(self.device.host.send_command(HCI_Reset_Command()), timeout=config.hci_reset_timeout)
             log.success("HCI Reset successful")
         except asyncio.TimeoutError:
-            log.error(f"HCI Reset timed out after {config.hci_reset_timeout}s - "
-                     "BT hardware may be asleep")
+            log.error(f"HCI Reset timed out after {config.hci_reset_timeout}s - BT hardware may be asleep")
             raise
 
         await self.device.power_on()
@@ -163,13 +151,9 @@ class BLEHIDHost:
             # Check for HID service
             is_hid = False
             if hasattr(advertisement, 'data') and advertisement.data:
-                services = advertisement.data.get(
-                    AdvertisingData.COMPLETE_LIST_OF_16_BIT_SERVICE_CLASS_UUIDS
-                )
+                services = advertisement.data.get(AdvertisingData.COMPLETE_LIST_OF_16_BIT_SERVICE_CLASS_UUIDS)
                 if not services:
-                    services = advertisement.data.get(
-                        AdvertisingData.INCOMPLETE_LIST_OF_16_BIT_SERVICE_CLASS_UUIDS
-                    )
+                    services = advertisement.data.get(AdvertisingData.INCOMPLETE_LIST_OF_16_BIT_SERVICE_CLASS_UUIDS)
                 if services:
                     for service_uuid in services:
                         if service_uuid == GATT_HID_SERVICE:
@@ -185,8 +169,7 @@ class BLEHIDHost:
                 }
                 devices_found.append(entry)
                 hid_marker = " [HID]" if is_hid else ""
-                log.detail(f"Found: {entry['name']} ({entry['address']}) "
-                          f"RSSI: {entry['rssi']}{hid_marker}")
+                log.detail(f"Found: {entry['name']} ({entry['address']}) RSSI: {entry['rssi']}{hid_marker}")
 
         self.device.on('advertisement', on_advertisement)
         await self.device.start_scanning(filter_duplicates=True)
@@ -210,13 +193,9 @@ class BLEHIDHost:
 
         target = Address(address)
         try:
-            self.connection = await asyncio.wait_for(
-                self.device.connect(target),
-                timeout=config.connect_timeout
-            )
+            self.connection = await asyncio.wait_for(self.device.connect(target), timeout=config.connect_timeout)
         except asyncio.TimeoutError:
-            log.warning(f"Connection timeout after {config.connect_timeout}s "
-                       "(device may be off or out of range)")
+            log.warning(f"Connection timeout after {config.connect_timeout}s (device may be off or out of range)")
             return False
 
         self.peer = Peer(self.connection)
@@ -318,9 +297,11 @@ class BLEHIDHost:
         else:
             log.info(f"Device Name: {self.device_name} (cached)")
 
+        # Configure button handler for this device
+        self.button_handler.set_device(self.device_name)
+
         # Find HID service
-        hid_services = [s for s in self.peer.services
-                       if s.uuid == GATT_HID_SERVICE]
+        hid_services = [s for s in self.peer.services if s.uuid == GATT_HID_SERVICE]
 
         if not hid_services:
             log.error("HID service not found!")
@@ -332,9 +313,7 @@ class BLEHIDHost:
         # Load or discover characteristics
         characteristics_cached = False
         if cache and 'characteristics' in cache:
-            characteristics_cached = await self._load_cached_characteristics(
-                hid_service, cache
-            )
+            characteristics_cached = await self._load_cached_characteristics(hid_service, cache)
 
         if not characteristics_cached:
             log.info("Discovering characteristics...")
@@ -461,12 +440,10 @@ class BLEHIDHost:
     async def _read_device_name(self):
         """Read device name from Generic Access Service."""
         try:
-            generic_access = [s for s in self.peer.services
-                            if s.uuid == GATT_GENERIC_ACCESS_SERVICE]
+            generic_access = [s for s in self.peer.services if s.uuid == GATT_GENERIC_ACCESS_SERVICE]
             if generic_access:
                 await self.peer.discover_characteristics(service=generic_access[0])
-                name_chars = [c for c in generic_access[0].characteristics
-                             if c.uuid == GATT_DEVICE_NAME_CHARACTERISTIC]
+                name_chars = [c for c in generic_access[0].characteristics if c.uuid == GATT_DEVICE_NAME_CHARACTERISTIC]
                 if name_chars:
                     value = await self.peer.read_value(name_chars[0])
                     self.device_name = bytes(value).decode('utf-8', errors='replace')
@@ -488,22 +465,13 @@ class BLEHIDHost:
                 elif not uuid_str.startswith('0000'):
                     raise ValueError(f"Invalid UUID format: {uuid_str}")
 
-                char = Characteristic(
-                    uuid=UUID(uuid_str),
-                    properties=char_data.get('properties', 0),
-                    permissions=0,
-                    value=b''
-                )
+                char = Characteristic(uuid=UUID(uuid_str), properties=char_data.get('properties', 0), permissions=0, value=b'')
                 char.handle = char_data['handle']
                 char.end_group_handle = char_data['handle'] + 2
                 char.service = hid_service
 
                 # Create CCCD descriptor
-                cccd = Descriptor(
-                    attribute_type=GATT_CCCD,
-                    permissions=0,
-                    value=b'\x00\x00'
-                )
+                cccd = Descriptor(attribute_type=GATT_CCCD, permissions=0, value=b'\x00\x00')
                 cccd.handle = char_data['handle'] + 1
                 cccd.characteristic = char
                 char.descriptors = [cccd]
@@ -541,8 +509,7 @@ class BLEHIDHost:
                 flags = value[3]
                 device_type = flags & 0x03
                 type_names = {0: 'Unknown', 1: 'Keyboard', 2: 'Mouse', 3: 'Reserved'}
-                log.detail(f"HID Information: Device Type = "
-                          f"{type_names.get(device_type, 'Unknown')} (0x{device_type:02x})")
+                log.detail(f"HID Information: Device Type = {type_names.get(device_type, 'Unknown')} (0x{device_type:02x})")
         except Exception as e:
             log.detail(f"Failed to read HID Information: {e}")
 
