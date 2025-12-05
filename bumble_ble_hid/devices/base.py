@@ -34,8 +34,7 @@ class ButtonMapper(ABC):
     """
 
     @abstractmethod
-    def map(self, button_state: int, x_movement: int = 0,
-            y_movement: int = 0) -> ButtonResult:
+    def map(self, button_state: int, x_movement: int = 0, y_movement: int = 0) -> ButtonResult:
         """Map raw HID data to a standardized button code.
 
         Args:

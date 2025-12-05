@@ -10,7 +10,6 @@ Author: Lucas Zampieri <lzampier@redhat.com>
 
 import argparse
 import asyncio
-import os
 import sys
 
 # Add the bumble_ble_hid directory to path for Kindle deployment

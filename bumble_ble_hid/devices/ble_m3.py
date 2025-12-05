@@ -54,8 +54,7 @@ class BLEM3Mapper(ButtonMapper):
     def device_name(self) -> str:
         return "BLE-M3"
 
-    def map(self, button_state: int, x_movement: int = 0,
-            y_movement: int = 0) -> ButtonResult:
+    def map(self, button_state: int, x_movement: int = 0, y_movement: int = 0) -> ButtonResult:
         """Map BLE-M3 button state to standardized button code.
 
         Args:
@@ -82,8 +81,7 @@ class BLEM3Mapper(ButtonMapper):
         # Unknown pattern - treat as noise
         return (None, None)
 
-    def _map_0x68_pattern(self, x_movement: int,
-                          y_movement: int) -> ButtonResult:
+    def _map_0x68_pattern(self, x_movement: int, y_movement: int) -> ButtonResult:
         """Decode the 0x68 button state using movement patterns.
 
         The 0x68 state is used for directional buttons, differentiated
