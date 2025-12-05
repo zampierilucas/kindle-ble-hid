@@ -8,7 +8,7 @@ Handles connection, pairing, GATT discovery, and HID report subscription.
 Author: Lucas Zampieri <lzampier@redhat.com>
 """
 
-__version__ = "2.0.0"  # Refactored modular architecture
+__version__ = "2.1.0"  # Split connection setup from idle waiting
 
 import asyncio
 import logging
@@ -80,6 +80,7 @@ class BLEHIDHost:
         self.report_map = None
         self.current_device_address = None
         self.device_name = None
+        self.disconnection_event = None  # Set when waiting for disconnection
 
     async def start(self):
         """Initialize the Bumble device and BLE stack.
@@ -377,54 +378,81 @@ class BLEHIDHost:
             except Exception as e:
                 log.warning(f"Failed to subscribe to report {report_id}: {e}")
 
-    async def run(self, target_address: str):
-        """Main connection loop.
+    async def connect_and_setup(self, target_address: str):
+        """Connect to device and set up HID service.
+
+        This method handles connection establishment only, not idle waiting.
+        Use wait_for_disconnection() after this to wait for HID reports.
 
         Args:
             target_address: Device address to connect to
+
+        Raises:
+            Exception: If connection or setup fails
         """
-        disconnection_event = asyncio.Event()
+        self.disconnection_event = asyncio.Event()
 
         def on_disconnection(reason):
             log.error(f"Disconnected: reason={reason}")
             self.button_handler.execute_disconnect_script()
-            disconnection_event.set()
+            self.disconnection_event.set()
+
+        await self.start()
+
+        if target_address:
+            connected = await self.connect(target_address)
+            if not connected:
+                raise Exception("Connection failed")
+        else:
+            target_address = await self._interactive_scan()
+            if not target_address:
+                raise Exception("No device selected")
+            connected = await self.connect(target_address)
+            if not connected:
+                raise Exception("Connection failed")
+
+        # Set disconnection handler
+        self.connection.on('disconnection', on_disconnection)
+
+        # Pair
+        if not await self.pair():
+            raise Exception("Pairing failed")
+
+        # Discover HID service
+        if not await self.discover_hid_service():
+            raise Exception("HID service discovery failed")
+
+        await self.subscribe_to_reports()
+        log.success("\nReceiving HID reports. Press Ctrl+C to exit.")
+
+    async def wait_for_disconnection(self):
+        """Wait for disconnection event.
+
+        Call this after connect_and_setup() to wait indefinitely for HID reports
+        until the device disconnects.
+        """
+        if not self.disconnection_event:
+            raise Exception("Must call connect_and_setup() first")
 
         try:
-            await self.start()
+            await self.disconnection_event.wait()
+            log.warning("\nConnection terminated")
+        except asyncio.CancelledError:
+            log.warning("\nConnection cancelled")
+            raise
+        finally:
+            await self.cleanup()
+            log.warning("Wait completed, returning to caller")
 
-            if target_address:
-                connected = await self.connect(target_address)
-                if not connected:
-                    return
-            else:
-                target_address = await self._interactive_scan()
-                if not target_address:
-                    return
-                connected = await self.connect(target_address)
-                if not connected:
-                    return
+    async def run(self, target_address: str):
+        """Main connection loop (legacy method for standalone use).
 
-            # Set disconnection handler
-            self.connection.on('disconnection', on_disconnection)
-
-            # Pair
-            if not await self.pair():
-                log.error("Pairing failed, exiting")
-                return
-
-            # Discover HID service
-            if await self.discover_hid_service():
-                await self.subscribe_to_reports()
-
-                log.success("\nReceiving HID reports. Press Ctrl+C to exit.")
-
-                try:
-                    await disconnection_event.wait()
-                    log.warning("\nConnection terminated")
-                except asyncio.CancelledError:
-                    log.warning("\nConnection cancelled")
-
+        Args:
+            target_address: Device address to connect to
+        """
+        try:
+            await self.connect_and_setup(target_address)
+            await self.wait_for_disconnection()
         except KeyboardInterrupt:
             log.warning("\nInterrupted by user")
         except asyncio.CancelledError:

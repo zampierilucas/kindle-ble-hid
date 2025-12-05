@@ -30,7 +30,7 @@ deploy:
     @echo "Creating cache directory..."
     ssh kindle "mkdir -p /mnt/us/bumble_ble_hid/cache"
     @echo "Starting daemon..."
-    #ssh kindle "/etc/init.d/ble-hid start"
+    ssh kindle "/etc/init.d/ble-hid start"
     @echo "Deployment complete!"
     @echo ""
     @echo "Start daemon with: just start"

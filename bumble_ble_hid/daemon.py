@@ -11,7 +11,7 @@ Format: Single device address (first non-comment line)
 Author: Lucas Zampieri <lzampier@redhat.com>
 """
 
-__version__ = "2.0.0"  # Refactored modular architecture
+__version__ = "2.1.0"  # Fixed connection timeout to only apply during establishment
 
 import asyncio
 import logging
@@ -35,7 +35,7 @@ class BLEHIDDaemon:
 
     Features:
     - Auto-reconnect on disconnection
-    - Connection cycle timeout for hardware sleep recovery
+    - Connection establishment timeout (does not affect idle connections)
     - Exponential backoff on repeated timeouts
     - Graceful shutdown handling
     """
@@ -81,21 +81,28 @@ class BLEHIDDaemon:
                 self.host = BLEHIDHost(config.transport)
 
                 logger.info("Connecting to device...")
-                # Wrap entire connection cycle with timeout
+                # Timeout only applies to connection establishment phase
+                # Once connected and waiting for HID reports, no timeout
                 await asyncio.wait_for(
-                    self.host.run(self.device_address),
+                    self.host.connect_and_setup(self.device_address),
                     timeout=config.cycle_timeout
                 )
-                logger.info("host.run() returned")
+                logger.info("Connection established, now waiting for HID reports...")
+
+                # Reset timeout counter on successful connection
+                self.consecutive_timeouts = 0
+
+                # Wait indefinitely for disconnection (no timeout here)
+                await self.host.wait_for_disconnection()
+                logger.info("host.wait_for_disconnection() returned")
 
                 # Connection ended normally
                 logger.info("Connection ended, will reconnect")
-                self.consecutive_timeouts = 0
 
             except asyncio.TimeoutError:
                 self.consecutive_timeouts += 1
                 logger.warning(
-                    f"Connection cycle timed out after {config.cycle_timeout}s "
+                    f"Connection establishment timed out after {config.cycle_timeout}s "
                     f"(consecutive: {self.consecutive_timeouts})"
                 )
                 logger.warning("BT hardware may be asleep - forcing transport cleanup")
