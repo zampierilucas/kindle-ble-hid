@@ -158,14 +158,13 @@ class ButtonScriptExecutor:
 
         # Execute script in background
         try:
-            print(color(f">>> Executing: {script_path}", 'cyan'))
             subprocess.Popen(
                 [script_path],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 start_new_session=True  # Detach from parent process
             )
-            print(color(f">>> Script launched successfully", 'green'))
+            print(color(f">>> Executed: {script_path}", 'green'))
         except Exception as e:
             print(color(f">>> Failed to execute script: {e}", 'red'))
 
@@ -211,8 +210,7 @@ class BLEHIDHost:
         self.button_executor = ButtonScriptExecutor()
         self.hid_reports = {}  # report_id -> characteristic
         self.report_map = None  # HID report map (cached for debugging)
-        self.last_button_state = {}  # report_id -> button_state (to detect changes)
-        self.last_press_time = 0  # Global timestamp for debouncing (across all report IDs)
+        self.last_execution_time = 0  # Timestamp of last script execution (for debouncing)
         self.current_device_address = None  # Track connected device for cache
         self.device_name = None  # BLE device name from Generic Access Service
 
@@ -780,6 +778,14 @@ class BLEHIDHost:
         if button_state == 0xc6:
             return (0x01, "Button 1 (Left)")
 
+        # 0x36 pattern - also LEFT (another variant)
+        if button_state == 0x36:
+            return (0x01, "Button 1 (Left)")
+
+        # 0xe8 pattern - also LEFT (another variant)
+        if button_state == 0xe8:
+            return (0x01, "Button 1 (Left)")
+
         # 0x2c pattern - this is CENTER/SELECT button
         if button_state == 0x2c:
             return (0x10, "Button 5 (Center)")
@@ -790,22 +796,29 @@ class BLEHIDHost:
 
         # For 0x68, we need to look at the exact movement pattern
         if button_state == 0x68:
-            # Down: positive Y movement (typically 0x20 = +32)
-            # Use threshold to ignore small positive jitter
-            if y_signed > 15:
-                return (0x08, "Button 4 (Down)")
+            # Observed values:
+            # RIGHT: x:01, y:90 (144 = -112 signed) - X movement indicates RIGHT!
+            # UP:    x:00, y:c8 (200 = -56 signed)
+            # DOWN:  x:00, y:90 (144 = -112 signed), y:20 (32), y:2c (44)
+            #
+            # Strategy: Check X movement FIRST to catch RIGHT
+            # Then use Y ranges for UP/DOWN (only when x==0)
 
-            # Up: significant negative Y movement (need strong negative signal)
-            # Threshold lowered to -15 to catch initial UP press (was -20)
-            if y_signed < -15:
-                # UP has x=0x00 (no X movement)
-                # RIGHT has small positive x (like 0x01)
-                if x_movement == 0x00:
+            # RIGHT: any non-zero X movement with strong negative Y
+            if x_movement != 0x00 and y_signed < -50:
+                return (0x04, "Button 3 (Right)")
+
+            # For zero X movement, check Y ranges
+            if x_movement == 0x00:
+                # DOWN: either very negative (< -70) OR positive (> 20)
+                if y_signed < -70 or y_signed > 20:
+                    return (0x08, "Button 4 (Down)")
+
+                # UP: moderately negative (-70 to -50)
+                if -70 <= y_signed < -50:
                     return (0x02, "Button 2 (Up)")
-                else:
-                    return (0x04, "Button 3 (Right)")
 
-            # Weak signals (y between -15 and +15) - ignore as noise/release events
+            # Everything else is noise
             return (None, None)
 
         # Right button sometimes sends 0xFA
@@ -820,7 +833,12 @@ class BLEHIDHost:
         return (None, None)
 
     def _on_hid_report(self, value):
-        """Handle incoming HID input reports and execute button scripts"""
+        """Handle incoming HID input reports and execute button scripts
+
+        The clicker sends multiple HID reports during a single button press.
+        Use simple time-based debouncing: only execute if enough time has passed
+        since the last execution (default 500ms from config).
+        """
         report_data = bytes(value)
 
         # Button mapping with script execution is always enabled
@@ -833,29 +851,33 @@ class BLEHIDHost:
         x_movement = report_data[2] if len(report_data) > 2 else 0
         y_movement = report_data[3] if len(report_data) > 3 else 0
 
-        # Detect if any button is pressed (non-zero button state)
-        if button_state != 0:
-            # Debounce: ignore ANY button press within configured time (global across all report IDs)
-            current_time = time.time()
-            debounce_sec = self.button_executor.debounce_ms / 1000.0
+        # Ignore release events (button_state == 0)
+        if button_state == 0:
+            return
 
-            if current_time - self.last_press_time < debounce_sec:
-                return
+        # Map the button combination to a clean single button
+        mapped_button, button_name = self._map_button_combination(button_state, x_movement, y_movement)
 
-            # Map the button combination to a clean single button using movement direction
-            mapped_button, button_name = self._map_button_combination(button_state, x_movement, y_movement)
+        # Ignore unknown button combinations and noise
+        if mapped_button is None:
+            return
 
-            if mapped_button is None:
-                print(color(f"    Unknown button combination: 0x{button_state:02x}", 'yellow'))
-                return
+        # Time-based debouncing: only execute if enough time has passed
+        current_time = time.time()
+        debounce_sec = self.button_executor.debounce_ms / 1000.0
 
-            print(color(f">>> Detected: {button_name} (raw: 0x{button_state:02x}, x:{x_movement:02x}, y:{y_movement:02x})", 'cyan'))
+        if current_time - self.last_execution_time < debounce_sec:
+            # Too soon after last execution, ignore this report
+            return
 
-            # Execute the script for this button
-            self.button_executor.execute_button_script(mapped_button, button_name)
+        # Log the raw data that led to this button press
+        print(color(f">>> Button press: {button_name} (raw: 0x{button_state:02x}, x:{x_movement:02x}, y:{y_movement:02x})", 'cyan'))
 
-            # Update global debounce timestamp
-            self.last_press_time = current_time
+        # Execute script for this button press
+        self.button_executor.execute_button_script(mapped_button, button_name)
+
+        # Update last execution timestamp
+        self.last_execution_time = current_time
 
 
     async def run(self, target_address: str):

@@ -5,8 +5,8 @@
     "0x04": "/mnt/us/bumble_ble_hid/Scripts/nextPage.sh",
     "0x08": "/mnt/us/bumble_ble_hid/Scripts/brightnessDown.sh",
     "0x10": "/mnt/us/bumble_ble_hid/Scripts/tapBar.sh",
-    "0x20": "/mnt/us/bumble_ble_hid/Scripts/tapBar.sh"
+    "0x20": "/mnt/us/bumble_ble_hid/Scripts/brightnessToggle.sh"
   },
-  "debounce_ms": 600,
+  "debounce_ms": 200,
   "log_button_presses": true
 }
