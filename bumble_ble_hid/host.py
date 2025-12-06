@@ -227,7 +227,38 @@ class BLEHIDHost:
         self.connection.on('pairing', self._on_pairing)
         self.connection.on('pairing_failure', self._on_pairing_failure)
 
+        # Request optimized connection parameters for battery savings
+        await self._request_connection_parameters()
+
         return True
+
+    async def _request_connection_parameters(self):
+        """Request power-optimized BLE connection parameters.
+
+        This negotiates connection interval, peripheral latency, and supervision
+        timeout with the peripheral to reduce battery usage while maintaining
+        responsiveness for HID input.
+        """
+        if not self.connection:
+            return
+
+        try:
+            log.info(f"Requesting connection parameters: "
+                    f"interval={config.connection_interval_min}-{config.connection_interval_max}ms, "
+                    f"latency={config.peripheral_latency}, "
+                    f"timeout={config.supervision_timeout}ms")
+
+            await self.connection.update_parameters(
+                connection_interval_min=config.connection_interval_min,
+                connection_interval_max=config.connection_interval_max,
+                max_latency=config.peripheral_latency,
+                supervision_timeout=config.supervision_timeout,
+            )
+            log.success("Connection parameters updated for power optimization")
+
+        except Exception as e:
+            # Parameter update is best-effort - don't fail connection if it fails
+            log.warning(f"Connection parameter update failed (non-fatal): {e}")
 
     async def pair(self) -> bool:
         """Pair with connected device (or restore bonding).

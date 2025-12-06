@@ -68,6 +68,18 @@ class Config:
         self.connect_timeout = self._getint('connection', 'connect_timeout', 30)
         self.transport_timeout = self._getint('connection', 'transport_timeout', 30)
 
+        # BLE connection parameters (for battery optimization)
+        # Connection interval in ms (7.5-4000ms, higher = less power, more latency)
+        # 100ms is a good balance for HID devices that don't need constant updates
+        self.connection_interval_min = self._getint('ble_power', 'connection_interval_min', 100)
+        self.connection_interval_max = self._getint('ble_power', 'connection_interval_max', 100)
+        # Peripheral latency: number of connection events that can be skipped (0-499)
+        # Higher values allow peripheral to sleep longer when idle
+        self.peripheral_latency = self._getint('ble_power', 'peripheral_latency', 4)
+        # Supervision timeout in ms (100-32000ms)
+        # How long before connection is considered lost if no response
+        self.supervision_timeout = self._getint('ble_power', 'supervision_timeout', 5000)
+
         # Button handling
         self.debounce_ms = self._getint('buttons', 'debounce_ms', 200)
         self.log_button_presses = self._getbool('buttons', 'log_button_presses', True)
