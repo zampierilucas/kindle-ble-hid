@@ -27,9 +27,10 @@ jobs:
       - name: Create Dockerfile for armel build
         run: |
           cat > Dockerfile.armel <<'DOCKERFILE'
-          # ARM soft-float (armel) build for old Kindles
-          # Using official armel/debian image
-          FROM armel/debian:bullseye
+          # ARM soft-float build for old Kindles
+          # Using balenalib Raspberry Pi image which supports ARMv6
+          # This provides compatibility with older ARM devices
+          FROM balenalib/rpi-debian:buster-build
 
           # Install Python and build dependencies
           RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -70,7 +71,7 @@ jobs:
       - name: Build ARM soft-float binary
         run: |
           docker buildx build \
-            --platform linux/arm/v5 \
+            --platform linux/arm/v6 \
             --load \
             -t kindle-ble-hid-armel-builder \
             -f Dockerfile.armel .
