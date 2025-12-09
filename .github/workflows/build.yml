@@ -1,4 +1,4 @@
-name: Build ARM Soft-Float Binary (armel)
+name: Build Binaries
 
 on:
   push:
@@ -10,9 +10,31 @@ on:
 
 jobs:
   build:
-    # Use native ARM64 runner with Docker for ARM32 build
-    # ARM64 can run ARM32 containers via kernel compat layer
-    runs-on: ubuntu-24.04-arm
+    name: Build ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: x86_64
+            runner: ubuntu-22.04
+            platform: linux/amd64
+            image: python:3.9-slim-bullseye
+            output: kindle-ble-hid-x86_64
+
+          - name: armhf
+            runner: ubuntu-24.04-arm
+            platform: linux/arm/v7
+            image: arm32v7/python:3.9-slim-bullseye
+            output: kindle-ble-hid-armhf
+
+          - name: armel
+            runner: ubuntu-24.04-arm
+            platform: linux/arm/v6
+            image: balenalib/rpi-debian:bookworm-build
+            output: kindle-ble-hid-armel
 
     steps:
       - name: Checkout repository
@@ -21,14 +43,12 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Create Dockerfile for armel build
+      - name: Create Dockerfile
         run: |
-          cat > Dockerfile.armel <<'DOCKERFILE'
-          # ARM soft-float build for old Kindles
-          # Using balenalib Raspberry Pi image which supports ARMv6
-          FROM balenalib/rpi-debian:bookworm-build
+          cat > Dockerfile.build <<EOF
+          FROM ${{ matrix.image }}
 
-          # Install Python and build dependencies
+          # Install build dependencies
           RUN apt-get update && apt-get install -y --no-install-recommends \
               python3 \
               python3-pip \
@@ -45,6 +65,12 @@ jobs:
               ordered-set \
               zstandard \
               bumble>=0.0.193 \
+              aiofiles>=23.0.0 2>/dev/null || \
+              pip3 install --no-cache-dir \
+              nuitka \
+              ordered-set \
+              zstandard \
+              bumble>=0.0.193 \
               aiofiles>=23.0.0
 
           WORKDIR /build
@@ -56,37 +82,37 @@ jobs:
               --mode=onefile \
               -j 4 \
               --lto=no \
-              --output-filename=kindle-ble-hid-armel \
+              --output-filename=${{ matrix.output }} \
               --include-data-file=button_config.json=button_config.json \
               --nofollow-import-to=pytest \
               --nofollow-import-to=unittest \
               --nofollow-import-to=setuptools \
               daemon.py
-          DOCKERFILE
+          EOF
 
-      - name: Build ARM soft-float binary
+      - name: Build binary
         run: |
           docker buildx build \
-            --platform linux/arm/v6 \
+            --platform ${{ matrix.platform }} \
             --load \
-            -t kindle-ble-hid-armel-builder \
-            -f Dockerfile.armel .
+            -t kindle-ble-hid-builder \
+            -f Dockerfile.build .
 
       - name: Extract binary from container
         run: |
-          docker create --name extract kindle-ble-hid-armel-builder
-          docker cp extract:/build/kindle-ble-hid-armel ./kindle-ble-hid-armel
+          docker create --name extract kindle-ble-hid-builder
+          docker cp extract:/build/${{ matrix.output }} ./${{ matrix.output }}
           docker rm extract
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: kindle-ble-hid-armel
-          path: kindle-ble-hid-armel
+          name: ${{ matrix.output }}
+          path: ${{ matrix.output }}
           retention-days: 30
 
       - name: Upload to release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: kindle-ble-hid-armel
+          files: ${{ matrix.output }}
