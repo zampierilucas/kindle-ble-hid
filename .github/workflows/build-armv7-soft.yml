@@ -10,16 +10,13 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    # Use native ARM64 runner with Docker for ARM32 build
+    # ARM64 can run ARM32 containers via kernel compat layer
+    runs-on: ubuntu-24.04-arm
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Set up QEMU for ARM emulation
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: arm
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -29,7 +26,6 @@ jobs:
           cat > Dockerfile.armel <<'DOCKERFILE'
           # ARM soft-float build for old Kindles
           # Using balenalib Raspberry Pi image which supports ARMv6
-          # This provides compatibility with older ARM devices
           FROM balenalib/rpi-debian:bookworm-build
 
           # Install Python and build dependencies

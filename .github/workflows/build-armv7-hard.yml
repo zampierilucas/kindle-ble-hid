@@ -10,16 +10,14 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    # Use native ARM64 runner with Docker for ARM32 build
+    # This is faster than x86 + QEMU because the ARM64 runner
+    # can run ARM32 containers natively via kernel compat layer
+    runs-on: ubuntu-24.04-arm
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Set up QEMU for ARM emulation
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: arm
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
