@@ -86,6 +86,7 @@ jobs:
               --nofollow-import-to=pytest \
               --nofollow-import-to=unittest \
               --nofollow-import-to=setuptools \
+              --nofollow-import-to=bumble.hci \
               daemon.py
           EOF
 
