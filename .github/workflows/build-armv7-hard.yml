@@ -1,4 +1,4 @@
-name: Build ARMv7 Hard-Float Binary
+name: Build ARM Hard-Float Binary (armhf)
 
 on:
   push:
@@ -60,29 +60,29 @@ jobs:
               --mode=onefile \
               -j 4 \
               --lto=no \
-              --output-filename=kindle-ble-hid-armv7-hard \
+              --output-filename=kindle-ble-hid-armhf \
               --include-data-file=button_config.json=button_config.json \
               --nofollow-import-to=pytest \
               --nofollow-import-to=unittest \
               --nofollow-import-to=setuptools \
-              ble_hid_daemon.py
+              daemon.py
           EOF
 
       - name: Extract binary from container
         run: |
           docker create --name extract kindle-ble-hid-armhf-builder
-          docker cp extract:/build/kindle-ble-hid-armv7-hard ./kindle-ble-hid-armv7-hard
+          docker cp extract:/build/kindle-ble-hid-armhf ./kindle-ble-hid-armhf
           docker rm extract
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: kindle-ble-hid-armv7-hard
-          path: kindle-ble-hid-armv7-hard
+          name: kindle-ble-hid-armhf
+          path: kindle-ble-hid-armhf
           retention-days: 30
 
       - name: Upload to release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: kindle-ble-hid-armv7-hard
+          files: kindle-ble-hid-armhf

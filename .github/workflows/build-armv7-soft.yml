@@ -1,4 +1,4 @@
-name: Build ARMv7 Soft-Float Binary
+name: Build ARM Soft-Float Binary (armel)
 
 on:
   push:
@@ -27,8 +27,9 @@ jobs:
       - name: Create Dockerfile for armel build
         run: |
           cat > Dockerfile.armel <<'DOCKERFILE'
-          # ARMv7 soft-float (armel) build using Debian armel port
-          FROM debian:bullseye
+          # ARMv7 soft-float (armel) build
+          # Using balenalib armel image which provides proper soft-float support
+          FROM balenalib/generic-armel-debian:bullseye-build
 
           # Install Python and build dependencies
           RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -42,7 +43,7 @@ jobs:
               && rm -rf /var/lib/apt/lists/*
 
           # Install Python build tools and dependencies
-          RUN pip3 install --no-cache-dir \
+          RUN pip3 install --no-cache-dir --break-system-packages \
               nuitka \
               ordered-set \
               zstandard \
@@ -58,15 +59,15 @@ jobs:
               --mode=onefile \
               -j 4 \
               --lto=no \
-              --output-filename=kindle-ble-hid-armv7-soft \
+              --output-filename=kindle-ble-hid-armel \
               --include-data-file=button_config.json=button_config.json \
               --nofollow-import-to=pytest \
               --nofollow-import-to=unittest \
               --nofollow-import-to=setuptools \
-              ble_hid_daemon.py
+              daemon.py
           DOCKERFILE
 
-      - name: Build ARMv7 soft-float binary
+      - name: Build ARM soft-float binary
         run: |
           docker buildx build \
             --platform linux/arm/v5 \
@@ -77,18 +78,18 @@ jobs:
       - name: Extract binary from container
         run: |
           docker create --name extract kindle-ble-hid-armel-builder
-          docker cp extract:/build/kindle-ble-hid-armv7-soft ./kindle-ble-hid-armv7-soft
+          docker cp extract:/build/kindle-ble-hid-armel ./kindle-ble-hid-armel
           docker rm extract
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: kindle-ble-hid-armv7-soft
-          path: kindle-ble-hid-armv7-soft
+          name: kindle-ble-hid-armel
+          path: kindle-ble-hid-armel
           retention-days: 30
 
       - name: Upload to release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: kindle-ble-hid-armv7-soft
+          files: kindle-ble-hid-armel
