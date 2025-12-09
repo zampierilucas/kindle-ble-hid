@@ -30,7 +30,7 @@ jobs:
           # ARM soft-float build for old Kindles
           # Using balenalib Raspberry Pi image which supports ARMv6
           # This provides compatibility with older ARM devices
-          FROM balenalib/rpi-debian:buster-build
+          FROM balenalib/rpi-debian:bookworm-build
 
           # Install Python and build dependencies
           RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -44,7 +44,7 @@ jobs:
               && rm -rf /var/lib/apt/lists/*
 
           # Install Python build tools and dependencies
-          RUN pip3 install --no-cache-dir \
+          RUN pip3 install --no-cache-dir --break-system-packages \
               nuitka \
               ordered-set \
               zstandard \
