@@ -78,16 +78,18 @@ jobs:
           COPY bumble_ble_hid/button_config.json /build/
           COPY bumble_ble_hid/requirements.txt /build/
 
+          # Set low memory C compilation flags
+          ENV CFLAGS="-O1 -g0"
+
           RUN python3 -m nuitka \
               --mode=onefile \
               --lto=no \
+              --jobs=1 \
               --output-filename=${{ matrix.output }} \
               --include-data-file=button_config.json=button_config.json \
               --nofollow-import-to=pytest \
               --nofollow-import-to=unittest \
               --nofollow-import-to=setuptools \
-              --nofollow-import-to=bumble.hci \
-              --include-package=bumble \
               daemon.py
           EOF
 
