@@ -23,24 +23,18 @@ jobs:
             platform: linux/amd64
             image: python:3.9-slim-bullseye
             output: kindle-ble-hid-x86_64
-            nuitka_jobs: 1
-            extra_cflags: ""
 
           - name: armhf
             runner: ubuntu-24.04-arm
             platform: linux/arm/v7
             image: arm32v7/python:3.9-slim-bullseye
             output: kindle-ble-hid-armhf
-            nuitka_jobs: 1
-            extra_cflags: "-Os -ffunction-sections -fdata-sections"
 
           - name: armel
             runner: ubuntu-24.04-arm
             platform: linux/arm/v6
             image: balenalib/rpi-debian:bookworm-build
             output: kindle-ble-hid-armel
-            nuitka_jobs: 2
-            extra_cflags: "-ffunction-sections -fdata-sections"
 
     steps:
       - name: Checkout repository
@@ -84,12 +78,8 @@ jobs:
           COPY bumble_ble_hid/button_config.json /build/
           COPY bumble_ble_hid/requirements.txt /build/
 
-          # Set CFLAGS for large code support on ARM
-          ENV CFLAGS="${{ matrix.extra_cflags }}"
-
           RUN python3 -m nuitka \
               --mode=onefile \
-              -j ${{ matrix.nuitka_jobs }} \
               --lto=no \
               --output-filename=${{ matrix.output }} \
               --include-data-file=button_config.json=button_config.json \
