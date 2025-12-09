@@ -24,28 +24,25 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build ARMv7 soft-float binary
+      - name: Create Dockerfile for armel build
         run: |
-          docker buildx build \
-            --platform linux/arm/v7 \
-            --load \
-            -t kindle-ble-hid-armel-builder \
-            -f - . <<'EOF'
-          # ARMv7 soft-float (armel) build
-          # Uses arm32v7 base but compiles with soft-float ABI
-          FROM arm32v7/python:3.9-slim-bullseye
+          cat > Dockerfile.armel <<'DOCKERFILE'
+          # ARMv7 soft-float (armel) build using Debian armel port
+          FROM debian:bullseye
 
-          # Install build dependencies
+          # Install Python and build dependencies
           RUN apt-get update && apt-get install -y --no-install-recommends \
+              python3 \
+              python3-pip \
+              python3-dev \
               build-essential \
               patchelf \
               ccache \
               libffi-dev \
-              gcc-arm-linux-gnueabi \
               && rm -rf /var/lib/apt/lists/*
 
           # Install Python build tools and dependencies
-          RUN pip install --no-cache-dir \
+          RUN pip3 install --no-cache-dir \
               nuitka \
               ordered-set \
               zstandard \
@@ -57,10 +54,6 @@ jobs:
           COPY bumble_ble_hid/button_config.json /build/
           COPY bumble_ble_hid/requirements.txt /build/
 
-          # Build with soft-float flags
-          ENV CFLAGS="-mfloat-abi=soft"
-          ENV LDFLAGS="-mfloat-abi=soft"
-
           RUN python3 -m nuitka \
               --mode=onefile \
               -j 4 \
@@ -71,7 +64,15 @@ jobs:
               --nofollow-import-to=unittest \
               --nofollow-import-to=setuptools \
               ble_hid_daemon.py
-          EOF
+          DOCKERFILE
+
+      - name: Build ARMv7 soft-float binary
+        run: |
+          docker buildx build \
+            --platform linux/arm/v5 \
+            --load \
+            -t kindle-ble-hid-armel-builder \
+            -f Dockerfile.armel .
 
       - name: Extract binary from container
         run: |

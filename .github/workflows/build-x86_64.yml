@@ -38,8 +38,8 @@ jobs:
             aiofiles>=23.0.0
 
       - name: Build with Nuitka
-        working-directory: bumble_ble_hid
         run: |
+          cd bumble_ble_hid
           python3 -m nuitka \
             --mode=onefile \
             -j $(nproc) \
