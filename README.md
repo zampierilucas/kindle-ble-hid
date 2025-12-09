@@ -34,14 +34,9 @@ See `docs/BLE_SMP_LIMITATION.md` for technical details.
 - BLE HID implementation in `bumble_ble_hid/`
 - Init script at `/etc/init.d/ble-hid`
 
-## Hardware
+## Compatibility
 
-- **Device:** Kindle MT8110 Bellatrix
-- **SoC:** MediaTek MT8512 (ARMv7-A Cortex-A53)
-- **Kernel:** Linux 4.9.77-lab126
-- **Bluetooth:** MediaTek CONSYS via `/dev/stpbt`
-
-See `kindle_system_info.md` for complete system details.
+Should work on most jailbroken Kindles with Bluetooth support. See `kindle_system_info.md` for tested hardware details.
 
 ## Features
 
