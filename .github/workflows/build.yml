@@ -36,8 +36,8 @@ jobs:
 
           - name: armel
             runner: ubuntu-24.04-arm
-            platform: linux/arm/v6
-            image: balenalib/rpi-debian:bookworm-build
+            platform: linux/arm/v5
+            image: arm32v5/debian:bookworm-slim
             output: kindle-ble-hid-armel
             cflags: "-Os -g0 -fomit-frame-pointer"
             nofollow_hci: ""
