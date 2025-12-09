@@ -1,0 +1,93 @@
+name: Build ARMv7 Soft-Float Binary
+
+on:
+  push:
+    branches: [main, refactor/pure-uhid-passthrough, feature/*]
+    tags: ['v*']
+  pull_request:
+    branches: [main, refactor/pure-uhid-passthrough]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU for ARM emulation
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build ARMv7 soft-float binary
+        run: |
+          docker buildx build \
+            --platform linux/arm/v7 \
+            --load \
+            -t kindle-ble-hid-armel-builder \
+            -f - . <<'EOF'
+          # ARMv7 soft-float (armel) build
+          # Uses arm32v7 base but compiles with soft-float ABI
+          FROM arm32v7/python:3.9-slim-bullseye
+
+          # Install build dependencies
+          RUN apt-get update && apt-get install -y --no-install-recommends \
+              build-essential \
+              patchelf \
+              ccache \
+              libffi-dev \
+              gcc-arm-linux-gnueabi \
+              && rm -rf /var/lib/apt/lists/*
+
+          # Install Python build tools and dependencies
+          RUN pip install --no-cache-dir \
+              nuitka \
+              ordered-set \
+              zstandard \
+              bumble>=0.0.193 \
+              aiofiles>=23.0.0
+
+          WORKDIR /build
+          COPY bumble_ble_hid/*.py /build/
+          COPY bumble_ble_hid/button_config.json /build/
+          COPY bumble_ble_hid/requirements.txt /build/
+
+          # Build with soft-float flags
+          ENV CFLAGS="-mfloat-abi=soft"
+          ENV LDFLAGS="-mfloat-abi=soft"
+
+          RUN python3 -m nuitka \
+              --mode=onefile \
+              -j 4 \
+              --lto=no \
+              --output-filename=kindle-ble-hid-armv7-soft \
+              --include-data-file=button_config.json=button_config.json \
+              --nofollow-import-to=pytest \
+              --nofollow-import-to=unittest \
+              --nofollow-import-to=setuptools \
+              ble_hid_daemon.py
+          EOF
+
+      - name: Extract binary from container
+        run: |
+          docker create --name extract kindle-ble-hid-armel-builder
+          docker cp extract:/build/kindle-ble-hid-armv7-soft ./kindle-ble-hid-armv7-soft
+          docker rm extract
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kindle-ble-hid-armv7-soft
+          path: kindle-ble-hid-armv7-soft
+          retention-days: 30
+
+      - name: Upload to release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: kindle-ble-hid-armv7-soft
