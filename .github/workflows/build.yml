@@ -23,18 +23,21 @@ jobs:
             platform: linux/amd64
             image: python:3.9-slim-bullseye
             output: kindle-ble-hid-x86_64
+            cflags: "-O1 -g0"
 
           - name: armhf
             runner: ubuntu-24.04-arm
             platform: linux/arm/v7
             image: arm32v7/python:3.9-slim-bullseye
             output: kindle-ble-hid-armhf
+            cflags: "-Os -g0 -fomit-frame-pointer"
 
           - name: armel
             runner: ubuntu-24.04-arm
             platform: linux/arm/v6
             image: balenalib/rpi-debian:bookworm-build
             output: kindle-ble-hid-armel
+            cflags: "-Os -g0 -fomit-frame-pointer"
 
     steps:
       - name: Checkout repository
@@ -75,11 +78,12 @@ jobs:
 
           WORKDIR /build
           COPY bumble_ble_hid/*.py /build/
+          COPY bumble_ble_hid/devices/ /build/devices/
           COPY bumble_ble_hid/button_config.json /build/
           COPY bumble_ble_hid/requirements.txt /build/
 
-          # Set low memory C compilation flags
-          ENV CFLAGS="-O1 -g0"
+          # Set C compilation flags per architecture
+          ENV CFLAGS="${{ matrix.cflags }}"
 
           RUN python3 -m nuitka \
               --mode=onefile \
