@@ -27,9 +27,9 @@ jobs:
       - name: Create Dockerfile for armel build
         run: |
           cat > Dockerfile.armel <<'DOCKERFILE'
-          # ARMv7 soft-float (armel) build
-          # Using balenalib armel image which provides proper soft-float support
-          FROM balenalib/generic-armel-debian:bullseye-build
+          # ARM soft-float (armel) build for old Kindles
+          # Using official armel/debian image
+          FROM armel/debian:bullseye
 
           # Install Python and build dependencies
           RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -43,7 +43,7 @@ jobs:
               && rm -rf /var/lib/apt/lists/*
 
           # Install Python build tools and dependencies
-          RUN pip3 install --no-cache-dir --break-system-packages \
+          RUN pip3 install --no-cache-dir \
               nuitka \
               ordered-set \
               zstandard \
