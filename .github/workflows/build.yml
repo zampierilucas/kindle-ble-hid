@@ -31,13 +31,12 @@ jobs:
           - name: armhf
             runner: ubuntu-24.04-arm
             platform: linux/arm/v7
-            image: arm32v7/python:3.9-buster
+            image: balenalib/raspberrypi3-debian:bookworm-build
             output: kindle-ble-hid-armhf
             cflags: "-Os -g0 -fomit-frame-pointer"
             nofollow_hci: ""
-            timeout: 90
-            pip_flags: ""
-            archive_cmd: 'echo "deb http://archive.debian.org/debian buster main" > /etc/apt/sources.list && echo "deb http://archive.debian.org/debian-security buster/updates main" >> /etc/apt/sources.list'
+            timeout: 60
+            pip_flags: "--break-system-packages"
 
           # NOTE: armel (soft-float) build is currently disabled due to:
           # 1. No pre-built wheels for arm32v5 (cryptography, etc.)
@@ -64,9 +63,6 @@ jobs:
         run: |
           cat > Dockerfile.build <<EOFFILE
           FROM ${{ matrix.image }}
-
-          # For archived Debian releases, update sources to archive.debian.org
-          ${{ matrix.archive_cmd && format('RUN {0}', matrix.archive_cmd) || '# Using default repos' }}
 
           # Install build dependencies
           RUN apt-get update && apt-get install -y --no-install-recommends \
