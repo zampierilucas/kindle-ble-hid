@@ -12,7 +12,7 @@ jobs:
   build:
     name: Build ${{ matrix.name }}
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 60
+    timeout-minutes: ${{ matrix.timeout }}
 
     strategy:
       fail-fast: false
@@ -25,6 +25,7 @@ jobs:
             output: kindle-ble-hid-x86_64
             cflags: "-O1 -g0"
             nofollow_hci: ""
+            timeout: 60
 
           - name: armhf
             runner: ubuntu-24.04-arm
@@ -33,6 +34,7 @@ jobs:
             output: kindle-ble-hid-armhf
             cflags: "-Os -g0 -fomit-frame-pointer"
             nofollow_hci: ""
+            timeout: 60
 
           - name: armel
             runner: ubuntu-24.04-arm
@@ -41,6 +43,7 @@ jobs:
             output: kindle-ble-hid-armel
             cflags: "-Os -g0 -fomit-frame-pointer"
             nofollow_hci: ""
+            timeout: 180
 
     steps:
       - name: Checkout repository
