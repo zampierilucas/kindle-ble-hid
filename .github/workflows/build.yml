@@ -39,7 +39,7 @@ jobs:
           - name: armel
             runner: ubuntu-22.04
             platform: linux/arm/v5
-            image: arm32v5/debian:bookworm-slim
+            image: arm32v5/debian:bullseye
             output: kindle-ble-hid-armel
             cflags: "-Os -g0 -fomit-frame-pointer"
             nofollow_hci: ""
@@ -69,10 +69,19 @@ jobs:
               && rm -rf /var/lib/apt/lists/*
 
           # Install Python build tools and dependencies
-          RUN pip3 install --no-cache-dir --break-system-packages \
+          # Use --prefer-binary to avoid building from source when possible
+          RUN pip3 install --no-cache-dir --break-system-packages --prefer-binary \
               nuitka \
               ordered-set \
               zstandard \
+              cryptography==42.0.0 \
+              bumble>=0.0.193 \
+              aiofiles>=23.0.0 || \
+              pip3 install --no-cache-dir --prefer-binary \
+              nuitka \
+              ordered-set \
+              zstandard \
+              cryptography==42.0.0 \
               bumble>=0.0.193 \
               aiofiles>=23.0.0
 
