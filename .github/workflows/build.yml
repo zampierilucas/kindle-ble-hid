@@ -74,12 +74,6 @@ jobs:
               ordered-set \
               zstandard \
               bumble>=0.0.193 \
-              aiofiles>=23.0.0 2>/dev/null || \
-              pip3 install --no-cache-dir \
-              nuitka \
-              ordered-set \
-              zstandard \
-              bumble>=0.0.193 \
               aiofiles>=23.0.0
 
           WORKDIR /build
