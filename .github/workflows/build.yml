@@ -36,14 +36,19 @@ jobs:
             nofollow_hci: ""
             timeout: 60
 
-          - name: armel
-            runner: ubuntu-22.04
-            platform: linux/arm/v5
-            image: arm32v5/debian:bullseye
-            output: kindle-ble-hid-armel
-            cflags: "-Os -g0 -fomit-frame-pointer"
-            nofollow_hci: ""
-            timeout: 120
+          # NOTE: armel (soft-float) build is currently disabled due to:
+          # 1. No pre-built wheels for arm32v5 (cryptography, etc.)
+          # 2. Building from source requires Rust which fails under QEMU
+          # 3. QEMU emulation is extremely slow (3+ hours)
+          # For old Kindles that need armel, consider cross-compilation approach
+          # - name: armel
+          #   runner: ubuntu-22.04
+          #   platform: linux/arm/v5
+          #   image: arm32v5/debian:bullseye
+          #   output: kindle-ble-hid-armel
+          #   cflags: "-Os -g0 -fomit-frame-pointer"
+          #   nofollow_hci: ""
+          #   timeout: 120
 
     steps:
       - name: Checkout repository
@@ -69,19 +74,10 @@ jobs:
               && rm -rf /var/lib/apt/lists/*
 
           # Install Python build tools and dependencies
-          # Use --prefer-binary to avoid building from source when possible
-          RUN pip3 install --no-cache-dir --break-system-packages --prefer-binary \
+          RUN pip3 install --no-cache-dir --break-system-packages \
               nuitka \
               ordered-set \
               zstandard \
-              cryptography==42.0.0 \
-              bumble>=0.0.193 \
-              aiofiles>=23.0.0 || \
-              pip3 install --no-cache-dir --prefer-binary \
-              nuitka \
-              ordered-set \
-              zstandard \
-              cryptography==42.0.0 \
               bumble>=0.0.193 \
               aiofiles>=23.0.0
 
