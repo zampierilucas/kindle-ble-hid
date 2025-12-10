@@ -31,7 +31,7 @@ jobs:
           - name: armhf
             runner: ubuntu-24.04-arm
             platform: linux/arm/v7
-            image: arm32v7/debian:buster-slim
+            image: arm32v7/python:3.9-buster
             output: kindle-ble-hid-armhf
             cflags: "-Os -g0 -fomit-frame-pointer"
             nofollow_hci: ""
