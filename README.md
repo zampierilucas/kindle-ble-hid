@@ -1,3 +1,7 @@
+> **This project has been superseded by [kindle-hid-passthrough](https://github.com/zampierilucas/kindle-hid-passthrough)**, which provides a cleaner UHID pass-through implementation with better performance and simpler architecture.
+
+---
+
 # Kindle BLE HID Support
 
 Connect BLE keyboards, mice, and game controllers to your Kindle using Google Bumble.
